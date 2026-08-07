@@ -32,4 +32,12 @@ jobs:
             npm run build
             pm2 reload fit-pixel-api --update-env || pm2 start ecosystem.config.cjs
             pm2 save
-            curl -fsS http://127.0.0.1:3001/health
+            for i in 1 2 3 4 5 6 7 8 9 10; do
+              if curl -fsS http://127.0.0.1:3001/health; then
+                exit 0
+              fi
+              sleep 1
+            done
+            echo "Health check failed after reload"
+            pm2 logs fit-pixel-api --lines 30 --nostream || true
+            exit 1
