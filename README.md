@@ -235,3 +235,5 @@ Wire Supabase for auth, sync ingest (idempotency), and user data. Route paths an
 # deploy-test 2026-08-07T04:33:11Z
 
 # deploy-test 2026-08-07T04:37:46Z
+
+# deploy-test 2026-08-07T04:47:39Z
