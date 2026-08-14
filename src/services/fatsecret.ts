@@ -3,9 +3,11 @@ import { AppError } from "../types/api";
 import type {
   FoodDetailResponse,
   FoodDetailServing,
+  FoodHabitReadyPayload,
   FoodSearchItem,
   FoodSearchResponse,
 } from "../types/food";
+import { parseFatSecretDescription } from "../utils/parse-fatsecret-description";
 
 const TOKEN_URL = "https://oauth.fatsecret.com/connect/token";
 const API_BASE = "https://platform.fatsecret.com/rest";
@@ -122,6 +124,15 @@ function parseOptionalNumber(value: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+function parseOptionalBool(value: unknown): boolean | undefined {
+  if (value == null || value === "") return undefined;
+  if (typeof value === "boolean") return value;
+  const s = String(value).toLowerCase();
+  if (s === "1" || s === "true") return true;
+  if (s === "0" || s === "false") return false;
+  return undefined;
+}
+
 function normalizeSearchItem(raw: Record<string, unknown>): FoodSearchItem {
   const id = String(raw.food_id ?? "");
   const name = String(raw.food_name ?? "");
@@ -130,13 +141,27 @@ function normalizeSearchItem(raw: Record<string, unknown>): FoodSearchItem {
   const description =
     raw.food_description != null ? String(raw.food_description) : undefined;
 
-  let kcal: number | undefined;
-  if (description) {
-    const match = /Calories:\s*([\d.]+)/i.exec(description);
-    if (match) kcal = Number(match[1]);
-  }
+  const parsed = parseFatSecretDescription(description);
 
-  return { id, name, brandName, description, kcal };
+  return {
+    id,
+    name,
+    ...(brandName ? { brandName } : {}),
+    ...(description ? { description } : {}),
+    ...(parsed.kcal !== undefined
+      ? { kcal: parsed.kcal, calories: parsed.kcal }
+      : {}),
+    ...(parsed.proteinG !== undefined
+      ? { proteinG: parsed.proteinG, protein: parsed.proteinG }
+      : {}),
+    ...(parsed.carbsG !== undefined
+      ? { carbsG: parsed.carbsG, carbs: parsed.carbsG }
+      : {}),
+    ...(parsed.fatG !== undefined
+      ? { fatG: parsed.fatG, fat: parsed.fatG }
+      : {}),
+    ...(parsed.portionSize ? { portionSize: parsed.portionSize } : {}),
+  };
 }
 
 export async function searchFoods(options: {
@@ -176,21 +201,61 @@ export async function searchFoods(options: {
 }
 
 function normalizeServing(raw: Record<string, unknown>): FoodDetailServing {
+  const calories = parseOptionalNumber(raw.calories);
+  const carbohydrate = parseOptionalNumber(raw.carbohydrate);
+  const protein = parseOptionalNumber(raw.protein);
+  const fat = parseOptionalNumber(raw.fat);
+  const description =
+    raw.serving_description != null
+      ? String(raw.serving_description)
+      : undefined;
+  const isDefault = parseOptionalBool(raw.is_default);
+
   return {
     id: raw.serving_id != null ? String(raw.serving_id) : undefined,
-    description:
-      raw.serving_description != null
-        ? String(raw.serving_description)
-        : undefined,
-    calories: parseOptionalNumber(raw.calories),
-    carbohydrate: parseOptionalNumber(raw.carbohydrate),
-    protein: parseOptionalNumber(raw.protein),
-    fat: parseOptionalNumber(raw.fat),
+    ...(description ? { description, portionSize: description } : {}),
+    ...(calories !== undefined ? { calories, kcal: calories } : {}),
+    ...(carbohydrate !== undefined
+      ? { carbohydrate, carbsG: carbohydrate }
+      : {}),
+    ...(protein !== undefined ? { protein, proteinG: protein } : {}),
+    ...(fat !== undefined ? { fat, fatG: fat } : {}),
     metricAmount: parseOptionalNumber(raw.metric_serving_amount),
     metricUnit:
       raw.metric_serving_unit != null
         ? String(raw.metric_serving_unit)
         : undefined,
+    ...(isDefault !== undefined ? { isDefault } : {}),
+  };
+}
+
+function pickDefaultServing(
+  servings: FoodDetailServing[],
+): FoodDetailServing | undefined {
+  if (servings.length === 0) return undefined;
+  const marked = servings.find((s) => s.isDefault && s.kcal != null);
+  if (marked) return marked;
+  const withKcal = servings.find((s) => s.kcal != null);
+  return withKcal ?? servings[0];
+}
+
+function toHabitPayload(
+  name: string,
+  brandName: string | undefined,
+  serving: FoodDetailServing,
+): FoodHabitReadyPayload | undefined {
+  if (serving.kcal == null) return undefined;
+
+  return {
+    name,
+    kcal: serving.kcal,
+    ...(serving.proteinG !== undefined ? { proteinG: serving.proteinG } : {}),
+    ...(serving.carbsG !== undefined ? { carbsG: serving.carbsG } : {}),
+    ...(serving.fatG !== undefined ? { fatG: serving.fatG } : {}),
+    ...(serving.portionSize || serving.description
+      ? { portionSize: serving.portionSize ?? serving.description }
+      : {}),
+    ...(brandName ? { vendor: brandName } : {}),
   };
 }
 
@@ -213,12 +278,20 @@ export async function getFoodById(foodId: string): Promise<FoodDetailResponse> {
     throw new AppError(404, "BAD_REQUEST", `Food not found: ${foodId}`);
   }
 
+  const name = String(food.food_name ?? "");
+  const brandName =
+    food.brand_name != null ? String(food.brand_name) : undefined;
   const servings = asArray(food.servings?.serving).map(normalizeServing);
+  const defaultServing = pickDefaultServing(servings);
+  const habitPayload = defaultServing
+    ? toHabitPayload(name, brandName, defaultServing)
+    : undefined;
 
   return {
     id: String(food.food_id),
-    name: String(food.food_name ?? ""),
-    brandName: food.brand_name != null ? String(food.brand_name) : undefined,
+    name,
+    ...(brandName ? { brandName } : {}),
     servings,
+    ...(habitPayload ? { habitPayload } : {}),
   };
 }

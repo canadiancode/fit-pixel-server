@@ -51,6 +51,79 @@ curl http://localhost:3001/ready
 | `GET` | `/v1/food/search?q=` | no | Live if FatSecret env set; else stub |
 | `GET` | `/v1/food/:id` | no | Live if FatSecret env set; else stub |
 
+### Food search / detail (Expo custom-meal compatible)
+
+When FatSecret is configured, responses include macros the mobile app already uses for custom food → recent meals → saved meals:
+
+**`GET /v1/food/search?q=toast`** — each item includes habit fields plus list-row aliases:
+
+```json
+{
+  "ok": true,
+  "foods": [
+    {
+      "id": "1234",
+      "name": "Toast",
+      "brandName": "Generic",
+      "description": "Per Serving - Calories: 170kcal | Fat: 4.00g | Carbs: 30.00g | Protein: 5.00g",
+      "kcal": 170,
+      "proteinG": 5,
+      "carbsG": 30,
+      "fatG": 4,
+      "portionSize": "Serving",
+      "calories": 170,
+      "protein": 5,
+      "carbs": 30,
+      "fat": 4
+    }
+  ],
+  "page": 0,
+  "maxResults": 20
+}
+```
+
+Search macros are parsed from FatSecret’s `food_description` text (same summary FatSecret returns in search).
+
+**`GET /v1/food/:id`** — full servings from FatSecret, plus `habitPayload` ready for `addFood()` / `saveMeal()`:
+
+```json
+{
+  "ok": true,
+  "food": {
+    "id": "1234",
+    "name": "Toast",
+    "brandName": "Generic",
+    "servings": [
+      {
+        "id": "1",
+        "description": "1 slice",
+        "calories": 170,
+        "protein": 5,
+        "carbohydrate": 30,
+        "fat": 4,
+        "kcal": 170,
+        "proteinG": 5,
+        "carbsG": 30,
+        "fatG": 4,
+        "portionSize": "1 slice",
+        "isDefault": true
+      }
+    ],
+    "habitPayload": {
+      "name": "Toast",
+      "kcal": 170,
+      "proteinG": 5,
+      "carbsG": 30,
+      "fatG": 4,
+      "portionSize": "1 slice",
+      "vendor": "Generic"
+    }
+  }
+}
+```
+
+Expo wiring (when ready): call search → show rows → on select either use search macros for a quick log, or fetch `/:id` and pass `habitPayload` (or a chosen serving) into `addFood()` the same way custom meal does. Recent meals then appear automatically from `habit_logs`.
+
 Stub responses look like:
 
 ```json
