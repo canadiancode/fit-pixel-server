@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { validate } from "../middleware/validate";
+import { requireAuth } from "../middleware/require-auth";
 import {
   getFoodById,
   isFatSecretConfigured,
@@ -13,6 +14,7 @@ export const foodRouter = Router();
 
 foodRouter.get(
   "/search",
+  requireAuth,
   validate(foodSearchQuerySchema, "query"),
   async (req, res, next) => {
     try {
@@ -36,7 +38,7 @@ foodRouter.get(
   },
 );
 
-foodRouter.get("/:id", async (req, res, next) => {
+foodRouter.get("/:id", requireAuth, async (req, res, next) => {
   try {
     if (!isFatSecretConfigured()) {
       sendNotImplemented(
@@ -46,7 +48,8 @@ foodRouter.get("/:id", async (req, res, next) => {
       return;
     }
 
-    const id = req.params.id?.trim();
+    const rawId = req.params.id;
+    const id = typeof rawId === "string" ? rawId.trim() : "";
     if (!id) {
       throw new AppError(400, "VALIDATION_ERROR", "Food id is required");
     }

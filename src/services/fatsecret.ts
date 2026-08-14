@@ -54,12 +54,11 @@ async function fetchAccessToken(): Promise<string> {
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");
-    throw new AppError(
-      502,
-      "UPSTREAM_ERROR",
-      "Failed to obtain FatSecret access token",
-      { status: response.status, body: text.slice(0, 500) },
-    );
+    console.error("FatSecret token request failed", {
+      status: response.status,
+      body: text.slice(0, 500),
+    });
+    throw new AppError(502, "UPSTREAM_ERROR", "FatSecret API request failed");
   }
 
   const data = (await response.json()) as {
@@ -104,10 +103,11 @@ async function fatSecretGet(
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");
-    throw new AppError(502, "UPSTREAM_ERROR", "FatSecret API request failed", {
+    console.error("FatSecret API request failed", {
       status: response.status,
       body: text.slice(0, 500),
     });
+    throw new AppError(502, "UPSTREAM_ERROR", "FatSecret API request failed");
   }
 
   return response.json();

@@ -4,8 +4,9 @@ import { env, parseCorsOrigins } from "../config/env";
 export function createCorsMiddleware() {
   const origins = parseCorsOrigins(env.CORS_ORIGINS);
 
-  if (origins === "*") {
-    return cors({ origin: true, credentials: true });
+  // Empty or *: no browser CORS. Native Expo / curl (no Origin) still work.
+  if (origins.length === 0) {
+    return cors({ origin: false });
   }
 
   return cors({

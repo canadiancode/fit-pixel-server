@@ -4,17 +4,24 @@ import morgan from "morgan";
 import { env } from "./config/env";
 import { createCorsMiddleware } from "./middleware/cors";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler";
-import { authRouter } from "./routes/auth";
 import { foodRouter } from "./routes/food";
 import { habitsRouter } from "./routes/habits";
 import { healthRouter } from "./routes/health";
 import { meRouter } from "./routes/me";
 import { syncRouter } from "./routes/sync";
+import { wellKnownRouter } from "./routes/well-known";
 
 export function createApp() {
   const app = express();
 
-  app.use(helmet());
+  // One hop: nginx. Required for Helmet HSTS and X-Forwarded-Proto.
+  app.set("trust proxy", 1);
+
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+    }),
+  );
   app.use(createCorsMiddleware());
   app.use(express.json({ limit: "1mb" }));
   app.use(
@@ -23,8 +30,8 @@ export function createApp() {
     }),
   );
 
+  app.use(wellKnownRouter);
   app.use(healthRouter);
-  app.use("/v1/auth", authRouter);
   app.use("/v1/sync", syncRouter);
   app.use("/v1/me", meRouter);
   app.use("/v1/habits", habitsRouter);

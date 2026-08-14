@@ -4,7 +4,8 @@ export type ApiErrorCode =
   | "VALIDATION_ERROR"
   | "BAD_REQUEST"
   | "UPSTREAM_ERROR"
-  | "INTERNAL_ERROR";
+  | "INTERNAL_ERROR"
+  | "SERVICE_UNAVAILABLE";
 
 export type ApiErrorBody = {
   ok: false;

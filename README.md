@@ -2,13 +2,15 @@
 
 Node.js + Express + TypeScript API for the **Fit Pixel** Expo app (`one-rep-max`).
 
-This pass scaffolds the API shape, middleware, env config, and stub handlers. **Supabase / Postgres / real auth & sync persistence come next** — there is no database in this pass.
+Auth is **Supabase Auth** (verified JWTs via JWKS). User data is Postgres with RLS (`user_id = auth.uid()`). The API uses the **user JWT** for ingest — the service role is for droplet admin jobs only and is never used on request paths.
 
 ## Setup
 
 ```bash
 npm install
 cp .env.example .env
+# Fill SUPABASE_URL + SUPABASE_ANON_KEY (and DATABASE_URL to apply migrations)
+npm run db:migrate
 npm run dev
 ```
 
@@ -16,15 +18,15 @@ Default port: `3001` (`PORT` in `.env`).
 
 ## Health checks
 
-No database required:
-
 ```bash
 curl http://localhost:3001/health
 # {"ok":true,"status":"up"}
 
 curl http://localhost:3001/ready
-# {"ok":true,"status":"ready"}
+# {"ok":true,"status":"ready","supabaseConfigured":true|false}
 ```
+
+`/health` and `/ready` stay public. Authenticated routes return **503** if `SUPABASE_URL` is missing (fail closed).
 
 ## Scripts
 
@@ -34,24 +36,30 @@ curl http://localhost:3001/ready
 | `npm run build` | Compile to `dist/` |
 | `npm start` | Run compiled `dist/server.js` |
 | `npm run typecheck` | `tsc --noEmit` |
+| `npm run db:migrate` | Apply `supabase/migrations/*.sql` via `DATABASE_URL` (never prints the URL) |
 
 ## Endpoints
 
 | Method | Path | Auth | Status |
 |--------|------|------|--------|
 | `GET` | `/health` | no | Live |
-| `GET` | `/ready` | no | Live (process-only; DB check later) |
-| `POST` | `/v1/auth/signup` | no | Stub `501 NOT_IMPLEMENTED` |
-| `POST` | `/v1/auth/login` | no | Stub `501` |
-| `POST` | `/v1/auth/logout` | Bearer | Stub `501` |
-| `POST` | `/v1/auth/forgot-password` | no | Stub `501` |
-| `POST` | `/v1/sync` | Bearer | Stub `501` (validates body) |
-| `GET` | `/v1/me` | Bearer | Stub `501` |
-| `GET` | `/v1/habits` | Bearer | Stub `501` |
-| `GET` | `/v1/food/search?q=` | no | Live if FatSecret env set; else stub |
-| `GET` | `/v1/food/:id` | no | Live if FatSecret env set; else stub |
+| `GET` | `/ready` | no | Live (`supabaseConfigured` boolean, no secrets) |
+| `GET` | `/.well-known/apple-app-site-association` | no | Universal Links stub |
+| `GET` | `/.well-known/assetlinks.json` | no | App Links stub |
+| `GET` | `/auth/callback` | no | HTTPS callback stub (not scheme-only OAuth) |
+| `POST` | `/v1/sync` | JWT | Ingest outbox ops; `{ acks, serverTime }` |
+| `GET` | `/v1/me` | JWT | `{ id, email }` from verified claims |
+| `GET` | `/v1/habits` | JWT | Stub `501` |
+| `GET` | `/v1/food/search?q=` | JWT | Live if FatSecret env set; else stub |
+| `GET` | `/v1/food/:id` | JWT | Live if FatSecret env set; else stub |
+
+There is **no** `/v1/auth/*`. Signup / login / reset go to Supabase Auth from the app.
+
+Auth middleware verifies Supabase access tokens with JWKS (`iss` = `{SUPABASE_URL}/auth/v1`, `aud` = `authenticated`, `exp` checked).
 
 ### Food search / detail (Expo custom-meal compatible)
+
+Food routes require a verified JWT. Response shapes are unchanged from the FatSecret proxy.
 
 When FatSecret is configured, responses include macros the mobile app already uses for custom food → recent meals → saved meals:
 
@@ -122,9 +130,9 @@ Search macros are parsed from FatSecret’s `food_description` text (same summar
 }
 ```
 
-Expo wiring (when ready): call search → show rows → on select either use search macros for a quick log, or fetch `/:id` and pass `habitPayload` (or a chosen serving) into `addFood()` the same way custom meal does. Recent meals then appear automatically from `habit_logs`.
+Expo: call search with a user JWT → show rows → on select either use search macros for a quick log, or fetch `/:id` and pass `habitPayload` (or a chosen serving) into `addFood()`.
 
-Stub responses look like:
+Stub / error responses look like:
 
 ```json
 {
@@ -134,48 +142,38 @@ Stub responses look like:
 }
 ```
 
-Auth middleware currently only checks for `Authorization: Bearer <token>` — it does **not** verify against a database yet.
-
 ### Env
 
-See [`.env.example`](.env.example). Optional placeholders for later:
+See [`.env.example`](.env.example). Put real values only in gitignored `.env` (local + droplet).
 
-- `DATABASE_URL`
-- `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY`
+- `SUPABASE_URL` — required for JWT (JWKS). Missing ⇒ authenticated routes 503.
+- `SUPABASE_ANON_KEY` — user-scoped PostgREST client (with the caller JWT).
+- `SUPABASE_SERVICE_ROLE_KEY` — droplet/local only; unused on request paths; never `EXPO_PUBLIC_*`.
+- `DATABASE_URL` — Postgres URI for `npm run db:migrate`.
 
-FatSecret (optional for food proxy):
+FatSecret (optional for food proxy; keep secrets on the server only):
 
 - `FATSECRET_CLIENT_ID`
 - `FATSECRET_CLIENT_SECRET`
 
-## Sync contract (planned)
+`CORS_ORIGINS` is a comma-separated browser allowlist. Empty or `*` means no browser CORS (native Expo and curl still work). Never combine `*` with credentials. Production should leave it empty until there is a web app.
 
-The mobile app is offline-first with a SQLite `pending_server_ops` outbox. It does not call this API yet. Types live in [`src/types/sync.ts`](src/types/sync.ts).
+### Supabase dashboard (existing project — do not recreate)
 
-`POST /v1/sync` body:
+- Email provider **on**; third-party OAuth **off**; magic-link sign-in **off**.
+- Site URL: `https://api.aurashields.com`
+- Redirect allowlist: `https://api.aurashields.com/auth/callback`
+- Confirm-email: prefer off for password signup this pass, or HTTPS callback only — never scheme-only `onerepmax://`.
 
-```ts
-{
-  ops: Array<{
-    id: string; // UUID idempotency key
-    type:
-      | "habit_log"
-      | "daily_goals"
-      | "xp_award"
-      | "inventory_unlock"
-      | "loadout"
-      | "profile"
-      | "prefs"
-      | "saved_meal";
-    payload: Record<string, unknown>;
-    clientClockAt: string | null;
-    schemaVersion: number; // currently 1
-    trust: "fact" | "untrusted_client";
-  }>;
-}
-```
+SQL lives in [`supabase/migrations`](supabase/migrations). Apply with `npm run db:migrate` (needs `DATABASE_URL`). GitHub Actions does **not** run migrations — apply once on the droplet after deploy if needed.
 
-Planned response (not returned until persistence exists):
+## Sync contract
+
+The mobile app is offline-first with a SQLite `pending_server_ops` outbox. It drains to `POST /v1/sync` with the user JWT. Types live in [`src/types/sync.ts`](src/types/sync.ts).
+
+`POST /v1/sync` body: `{ ops }` (max 500). Each op has a UUID id, `schemaVersion: 1`, and a **per-type** payload (Zod). Client `trust` is ignored; the server uses `trustForOpType`.
+
+Response:
 
 ```ts
 {
@@ -184,13 +182,15 @@ Planned response (not returned until persistence exists):
 }
 ```
 
-### Trust rules (for the future DB pass)
+### Trust rules
 
 - **FACTS** (persist after sanitization): `habit_log`, `daily_goals`, `loadout`, `profile`, `prefs`, `saved_meal`
-- **UNTRUSTED** (do not trust for scoring): `xp_award`, `inventory_unlock`
-- Recompute XP from `habit_log` + `daily_goals` — never treat client XP as truth
-- Do not trust client `dayKey` alone — re-derive from timestamps + day boundary / timezone
-- Never store raw HealthKit sample blobs
+- **UNTRUSTED** (ack `synced` with `ignored_untrusted`; do not persist as score/ownership): `xp_award`, `inventory_unlock`
+- Recompute XP / level into `xp_state` from `habit_log` + `daily_goals`
+- Do not trust client `dayKey` — re-derive from timestamp + stored timezone / day-start
+- Ignore client `source` for scoring; never store raw HealthKit sample blobs
+- `profileVisible` is a server publish gate (default hidden)
+- Socials: `https://` or `@handle` only
 
 Habit log payload shape: [`src/types/habits.ts`](src/types/habits.ts).
 
@@ -274,19 +274,35 @@ Edit server env (never commit):
 
 ```bash
 nano /var/www/fit-pixel-server/.env
-# NODE_ENV=production, PORT=3001, CORS_ORIGINS=*, plus FatSecret/Supabase when ready
+# NODE_ENV=production, PORT=3001, CORS_ORIGINS= (empty)
+# SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, DATABASE_URL
+# plus FatSecret when used
 pm2 reload fit-pixel-api --update-env
 ```
 
-Issue TLS (after DNS points here):
+Apply SQL once (does not print the URL):
 
 ```bash
-certbot --nginx -d api.aurashields.com --agree-tos -m YOUR_EMAIL@example.com
+cd /var/www/fit-pixel-server
+npm run db:migrate
 ```
+
+Issue TLS (after DNS points here), then install the committed HTTP→HTTPS config:
+
+```bash
+certbot --nginx -d api.aurashields.com --agree-tos --redirect -m YOUR_EMAIL@example.com
+sudo cp /var/www/fit-pixel-server/deploy/nginx-api.aurashields.com.conf /etc/nginx/sites-available/api.aurashields.com
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+GitHub Actions reloads Node only; it does **not** copy nginx. After a nginx change lands on `main`, apply it once on the droplet with the `cp` / `nginx -t` / `reload` commands above.
 
 Verify:
 
 ```bash
+curl -sI http://api.aurashields.com/health | head -n 1
+# HTTP/1.1 301 Moved Permanently
+
 curl -fsS https://api.aurashields.com/health
 # {"ok":true,"status":"up"}
 ```
@@ -298,12 +314,12 @@ Push or merge to `main` → Actions runs **Deploy** → PM2 reloads. No manual S
 Local files used in production:
 
 - [`ecosystem.config.cjs`](ecosystem.config.cjs) — PM2 app name `fit-pixel-api`
-- [`deploy/nginx-api.aurashields.com.conf`](deploy/nginx-api.aurashields.com.conf) — nginx reverse proxy to `:3001`
+- [`deploy/nginx-api.aurashields.com.conf`](deploy/nginx-api.aurashields.com.conf) — HTTP 301 → HTTPS, HSTS, reverse proxy to `:3001`
 - [`deploy/bootstrap.sh`](deploy/bootstrap.sh) — one-time server setup
 
 ## Next
 
-Wire Supabase for auth, sync ingest (idempotency), and user data. Route paths and request types are ready to plug in.
+OAuth / magic-link wait on real Universal Links (replace the TEAMID / SHA-256 stubs). `GET /v1/habits` and food rate limits are later.
 
 # deploy-test 2026-08-07T04:33:11Z
 

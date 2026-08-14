@@ -11,7 +11,7 @@ const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "production", "test"])
     .default("development"),
-  CORS_ORIGINS: z.string().default("*"),
+  CORS_ORIGINS: z.string().default(""),
   FATSECRET_CLIENT_ID: z.preprocess(emptyToUndefined, z.string().optional()),
   FATSECRET_CLIENT_SECRET: z.preprocess(
     emptyToUndefined,
@@ -45,10 +45,26 @@ export function isFatSecretConfigured(): boolean {
   return Boolean(env.FATSECRET_CLIENT_ID && env.FATSECRET_CLIENT_SECRET);
 }
 
-export function parseCorsOrigins(raw: string): string[] | "*" {
+/** JWKS verification needs the project URL. Fail closed in requireAuth if missing. */
+export function isJwtConfigured(): boolean {
+  return Boolean(env.SUPABASE_URL);
+}
+
+/** User-scoped PostgREST client (anon key + user JWT). */
+export function isSupabaseUserClientConfigured(): boolean {
+  return Boolean(env.SUPABASE_URL && env.SUPABASE_ANON_KEY);
+}
+
+export function getSupabaseUrl(): string | undefined {
+  const raw = env.SUPABASE_URL?.trim();
+  if (!raw) return undefined;
+  return raw.replace(/\/$/, "");
+}
+
+export function parseCorsOrigins(raw: string): string[] {
   const trimmed = raw.trim();
   if (!trimmed || trimmed === "*") {
-    return "*";
+    return [];
   }
   return trimmed
     .split(",")
