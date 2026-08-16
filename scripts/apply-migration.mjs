@@ -2,9 +2,11 @@
 /**
  * Apply supabase/migrations/*.sql using DATABASE_URL.
  * Never prints the connection string.
+ *
+ * Prefers the `pg` driver (works without local `psql`). Falls back to `psql`.
  */
 import { spawnSync } from "node:child_process";
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
@@ -31,20 +33,71 @@ if (files.length === 0) {
   process.exit(1);
 }
 
-for (const name of files) {
-  const file = join(dir, name);
-  const result = spawnSync("psql", [databaseUrl, "-v", "ON_ERROR_STOP=1", "-f", file], {
-    stdio: ["ignore", "inherit", "inherit"],
-    env: process.env,
-  });
+function applyWithPsql(file) {
+  const result = spawnSync(
+    "psql",
+    [databaseUrl, "-v", "ON_ERROR_STOP=1", "-f", file],
+    {
+      stdio: ["ignore", "inherit", "inherit"],
+      env: process.env,
+    },
+  );
   if (result.error) {
-    console.error("psql failed to start. Install PostgreSQL client tools.");
-    process.exit(1);
+    return { ok: false, missingBinary: true };
   }
   if (result.status !== 0) {
-    console.error(`Migration failed: ${name}`);
-    process.exit(result.status ?? 1);
+    return { ok: false, missingBinary: false };
   }
+  return { ok: true, missingBinary: false };
+}
+
+async function applyWithPg(file) {
+  const pg = await import("pg");
+  const Client = pg.default?.Client ?? pg.Client;
+  const client = new Client({
+    connectionString: databaseUrl,
+    ssl: { rejectUnauthorized: false },
+  });
+  await client.connect();
+  try {
+    await client.query(readFileSync(file, "utf8"));
+  } finally {
+    await client.end();
+  }
+}
+
+let usedPg = false;
+try {
+  await import("pg");
+  usedPg = true;
+} catch {
+  usedPg = false;
+}
+
+for (const name of files) {
+  const file = join(dir, name);
+  if (usedPg) {
+    try {
+      await applyWithPg(file);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "unknown error";
+      console.error(`Migration failed: ${name}`);
+      console.error(message);
+      process.exit(1);
+    }
+    continue;
+  }
+
+  const result = applyWithPsql(file);
+  if (result.ok) continue;
+  if (result.missingBinary) {
+    console.error(
+      "psql failed to start. Install PostgreSQL client tools, or `npm install pg`.",
+    );
+    process.exit(1);
+  }
+  console.error(`Migration failed: ${name}`);
+  process.exit(1);
 }
 
 console.log(`Applied ${files.length} migration(s).`);

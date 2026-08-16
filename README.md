@@ -26,7 +26,7 @@ curl http://localhost:3001/ready
 # {"ok":true,"status":"ready","supabaseConfigured":true|false}
 ```
 
-`/health` and `/ready` stay public. Authenticated routes return **503** if `SUPABASE_URL` is missing (fail closed).
+`/health` and `/ready` stay public. `/ready` reports `supabaseConfigured: true` only when both `SUPABASE_URL` and `SUPABASE_ANON_KEY` are set. Authenticated routes return **503** if `SUPABASE_URL` is missing (fail closed).
 
 ## Scripts
 
@@ -146,7 +146,7 @@ Stub / error responses look like:
 
 See [`.env.example`](.env.example). Put real values only in gitignored `.env` (local + droplet).
 
-- `SUPABASE_URL` — required for JWT (JWKS). Missing ⇒ authenticated routes 503.
+- `SUPABASE_URL` — required for JWT (JWKS). Missing ⇒ authenticated routes 503. `/ready` also needs `SUPABASE_ANON_KEY`.
 - `SUPABASE_ANON_KEY` — user-scoped PostgREST client (with the caller JWT).
 - `SUPABASE_SERVICE_ROLE_KEY` — droplet/local only; unused on request paths; never `EXPO_PUBLIC_*`.
 - `DATABASE_URL` — Postgres URI for `npm run db:migrate`.

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { isJwtConfigured } from "../config/env";
+import { isSupabaseUserClientConfigured } from "../config/env";
 
 export const healthRouter = Router();
 
@@ -11,6 +11,6 @@ healthRouter.get("/ready", (_req, res) => {
   res.json({
     ok: true,
     status: "ready",
-    supabaseConfigured: isJwtConfigured(),
+    supabaseConfigured: isSupabaseUserClientConfigured(),
   });
 });
