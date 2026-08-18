@@ -11,7 +11,7 @@ const AASA = {
     apps: [],
     details: [
       {
-        appID: "TEAMID.com.onerepmax.app",
+        appID: "TEAMID.com.fitpixel.app",
         paths: ["/auth/callback", "/auth/callback/*"],
       },
     ],
@@ -23,7 +23,7 @@ const ASSET_LINKS = [
     relation: ["delegate_permission/common.handle_all_urls"],
     target: {
       namespace: "android_app",
-      package_name: "com.onerepmax.app",
+      package_name: "com.fitpixel.app",
       sha256_cert_fingerprints: [
         "00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00",
       ],

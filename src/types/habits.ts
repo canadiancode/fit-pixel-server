@@ -1,6 +1,6 @@
 /**
  * Habit log shapes mirrored from the Expo app
- * (`one-rep-max/lib/db/habit-log/types.ts`).
+ * (`fit-pixel-app/lib/db/habit-log/types.ts`).
  * Used for sync payload typing / future validation.
  */
 

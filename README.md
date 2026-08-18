@@ -1,6 +1,6 @@
 # Fit Pixel Server
 
-Node.js + Express + TypeScript API for the **Fit Pixel** Expo app (`one-rep-max`).
+Node.js + Express + TypeScript API for the **Fit Pixel** Expo app (`fit-pixel-app`).
 
 Auth is **Supabase Auth** (verified JWTs via JWKS). User data is Postgres with RLS (`user_id = auth.uid()`). The API uses the **user JWT** for ingest — the service role is for droplet admin jobs only and is never used on request paths.
 
@@ -176,7 +176,7 @@ FatSecret (optional for food proxy; keep secrets on the server only):
 - Email provider **on**; third-party OAuth **off**; magic-link sign-in **off**.
 - Site URL: `https://api.aurashields.com`
 - Redirect allowlist: `https://api.aurashields.com/auth/callback`
-- Confirm-email: prefer off for password signup this pass, or HTTPS callback only — never scheme-only `onerepmax://`.
+- Confirm-email: prefer off for password signup this pass, or HTTPS callback only — never scheme-only `fitpixel://`.
 
 SQL lives in [`supabase/migrations`](supabase/migrations). Apply with `npm run db:migrate` (needs `DATABASE_URL`). GitHub Actions does **not** run migrations — apply once on the droplet after deploy if needed.
 

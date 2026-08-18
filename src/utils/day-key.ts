@@ -1,6 +1,6 @@
 /**
  * App-day key (YYYY-MM-DD) from an instant + stored boundary.
- * Mirrors one-rep-max/lib/db/day-boundary/day-key.ts — do not trust client dayKey.
+ * Mirrors fit-pixel-app/lib/db/day-boundary/day-key.ts — do not trust client dayKey.
  */
 
 function pad2(value: number): string {
