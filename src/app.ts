@@ -4,10 +4,13 @@ import morgan from "morgan";
 import { env } from "./config/env";
 import { createCorsMiddleware } from "./middleware/cors";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler";
+import { dmsRouter } from "./routes/dms";
 import { foodRouter } from "./routes/food";
+import { gymsRouter } from "./routes/gyms";
 import { habitsRouter } from "./routes/habits";
 import { healthRouter } from "./routes/health";
 import { meRouter } from "./routes/me";
+import { pixelsRouter } from "./routes/pixels";
 import { syncRouter } from "./routes/sync";
 import { wellKnownRouter } from "./routes/well-known";
 
@@ -36,6 +39,9 @@ export function createApp() {
   app.use("/v1/me", meRouter);
   app.use("/v1/habits", habitsRouter);
   app.use("/v1/food", foodRouter);
+  app.use("/v1/gyms", gymsRouter);
+  app.use("/v1/dms", dmsRouter);
+  app.use("/v1/pixels", pixelsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

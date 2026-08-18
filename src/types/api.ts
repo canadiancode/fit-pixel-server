@@ -3,6 +3,9 @@ export type ApiErrorCode =
   | "UNAUTHORIZED"
   | "VALIDATION_ERROR"
   | "BAD_REQUEST"
+  | "NOT_FOUND"
+  | "FORBIDDEN"
+  | "RATE_LIMITED"
   | "UPSTREAM_ERROR"
   | "INTERNAL_ERROR"
   | "SERVICE_UNAVAILABLE";

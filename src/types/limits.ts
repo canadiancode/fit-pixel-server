@@ -37,6 +37,14 @@ export const DAILY_GOAL_LIMITS = {
   },
 } as const;
 
+export const CHAT_LIMITS = {
+  messageBodyMin: 1,
+  messageBodyMax: 2_000,
+  messagePageMax: 50,
+  messageMinIntervalMs: 800,
+  gymIdMax: 64,
+} as const;
+
 export const PROFILE_LIMITS = {
   displayNameMax: 80,
   bioMax: 500,

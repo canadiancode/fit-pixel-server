@@ -1,9 +1,26 @@
 import { Router } from "express";
 import { createUserSupabaseClient } from "../config/supabase";
 import { requireAuth } from "../middleware/require-auth";
+import { listJoinedGymChats } from "../services/chat";
 import { AppError } from "../types/api";
 
 export const meRouter = Router();
+
+meRouter.get("/gym-chats", requireAuth, async (req, res, next) => {
+  try {
+    const auth = req.auth;
+    if (!auth) {
+      throw new AppError(401, "UNAUTHORIZED", "Missing auth context");
+    }
+    const chats = await listJoinedGymChats(
+      createUserSupabaseClient(auth.token),
+      auth.userId,
+    );
+    res.json({ ok: true, chats });
+  } catch (err) {
+    next(err);
+  }
+});
 
 meRouter.get("/", requireAuth, async (req, res, next) => {
   try {

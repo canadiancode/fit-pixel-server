@@ -74,6 +74,25 @@ const EXPECTED = {
   loadouts: ["user_id", "equipped", "updated_at"],
   sync_ops: ["id", "user_id", "type", "status", "reason", "created_at"],
   xp_state: ["user_id", "lifetime_xp", "level", "updated_at"],
+  gyms: ["id", "name", "latitude", "longitude", "image_key", "created_at"],
+  conversations: ["id", "kind", "gym_id", "created_at"],
+  conversation_members: [
+    "conversation_id",
+    "user_id",
+    "joined_at",
+    "last_read_at",
+    "muted",
+  ],
+  messages: [
+    "id",
+    "conversation_id",
+    "sender_id",
+    "body",
+    "created_at",
+    "deleted_at",
+  ],
+  dm_pairs: ["user_lo", "user_hi", "conversation_id"],
+  chat_authors: ["user_id", "display_name"],
 };
 
 const url = process.env.SUPABASE_URL?.trim()?.replace(/\/$/, "");
@@ -131,7 +150,7 @@ if (extraNotes.length) {
 
 if (missingTables.length || missingColumns.length || extraNotes.length) {
   console.error(
-    "Schema does not match supabase/migrations/20260814000000_init.sql. Run npm run db:migrate.",
+    "Schema does not match supabase/migrations. Run npm run db:migrate.",
   );
   process.exit(1);
 }

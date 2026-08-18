@@ -52,6 +52,19 @@ curl http://localhost:3001/ready
 | `GET` | `/v1/habits` | JWT | Stub `501` |
 | `GET` | `/v1/food/search?q=` | JWT | Live if FatSecret env set; else stub |
 | `GET` | `/v1/food/:id` | JWT | Live if FatSecret env set; else stub |
+| `GET` | `/v1/gyms` | JWT | Gym catalog + member counts + joined |
+| `GET` | `/v1/gyms/:gymId` | JWT | One gym |
+| `POST` | `/v1/gyms/:gymId/join` | JWT | Join gym chat |
+| `DELETE` | `/v1/gyms/:gymId/leave` | JWT | Leave gym chat |
+| `GET` | `/v1/gyms/:gymId/messages` | JWT | Gym message history |
+| `POST` | `/v1/gyms/:gymId/messages` | JWT | Send gym message |
+| `GET` | `/v1/me/gym-chats` | JWT | Joined gym chats |
+| `GET` | `/v1/dms` | JWT | DM inbox |
+| `POST` | `/v1/dms` | JWT | Find-or-create DM `{ peerUserId }` |
+| `GET` | `/v1/dms/:conversationId/messages` | JWT | DM history |
+| `POST` | `/v1/dms/:conversationId/messages` | JWT | Send DM |
+| `GET` | `/v1/pixels/search?q=` | JWT | Search display names |
+| `GET` | `/v1/pixels/:userId` | JWT | Public chat author |
 
 There is **no** `/v1/auth/*`. Signup / login / reset go to Supabase Auth from the app.
 
