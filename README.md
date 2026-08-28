@@ -46,7 +46,7 @@ curl http://localhost:3001/ready
 | `GET` | `/ready` | no | Live (`supabaseConfigured` boolean, no secrets) |
 | `GET` | `/.well-known/apple-app-site-association` | no | Universal Links stub |
 | `GET` | `/.well-known/assetlinks.json` | no | App Links stub |
-| `GET` | `/auth/callback` | no | HTTPS callback stub (not scheme-only OAuth) |
+| `GET` | `/auth/callback` | no | Password-reset form (browser → Supabase Auth; anon key only) |
 | `POST` | `/v1/sync` | JWT | Ingest outbox ops; `{ acks, serverTime }` |
 | `GET` | `/v1/me` | JWT | `{ id, email }` from verified claims |
 | `GET` | `/v1/habits` | JWT | Stub `501` |
@@ -66,7 +66,7 @@ curl http://localhost:3001/ready
 | `GET` | `/v1/pixels/search?q=` | JWT | Search display names |
 | `GET` | `/v1/pixels/:userId` | JWT | Public chat author |
 
-There is **no** `/v1/auth/*`. Signup / login / reset go to Supabase Auth from the app.
+There is **no** `/v1/auth/*`. Signup / login stay client → Supabase Auth. Password reset completes on `GET /auth/callback` (browser talks to Supabase with the anon key).
 
 Auth middleware verifies Supabase access tokens with JWKS (`iss` = `{SUPABASE_URL}/auth/v1`, `aud` = `authenticated`, `exp` checked).
 
@@ -175,7 +175,7 @@ FatSecret (optional for food proxy; keep secrets on the server only):
 
 - Email provider **on**; third-party OAuth **off**; magic-link sign-in **off**.
 - Site URL: `https://api.aurashields.com`
-- Redirect allowlist: `https://api.aurashields.com/auth/callback`
+- Redirect allowlist: `https://api.aurashields.com/auth/callback` (password-reset form; not a custom scheme)
 - Confirm-email: prefer off for password signup this pass, or HTTPS callback only — never scheme-only `fitpixel://`.
 
 SQL lives in [`supabase/migrations`](supabase/migrations). Apply with `npm run db:migrate` (needs `DATABASE_URL`). GitHub Actions does **not** run migrations — apply once on the droplet after deploy if needed.

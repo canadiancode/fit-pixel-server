@@ -1,9 +1,14 @@
 import { Router } from "express";
 
+import { renderAuthCallbackHtml } from "./auth-callback-html";
+
 /**
  * HTTPS Universal Links / App Links stubs.
  * Do not enable magic-link or third-party OAuth until these are real
  * (Apple Team ID + Android SHA-256) and associated domains are live.
+ *
+ * GET /auth/callback is the password-reset landing page (anon key in the
+ * HTML only — never the service role). Recovery tokens stay in the browser.
  */
 
 const AASA = {
@@ -31,19 +36,6 @@ const ASSET_LINKS = [
   },
 ];
 
-const CALLBACK_HTML = `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Fit Pixel</title>
-  </head>
-  <body>
-    <p>Return to the Fit Pixel app to continue.</p>
-    <p>Password reset and OAuth are not enabled on the custom URL scheme alone.</p>
-  </body>
-</html>`;
-
 export const wellKnownRouter = Router();
 
 wellKnownRouter.get(
@@ -62,5 +54,9 @@ wellKnownRouter.get("/.well-known/assetlinks.json", (_req, res) => {
 });
 
 wellKnownRouter.get("/auth/callback", (_req, res) => {
-  res.type("html").send(CALLBACK_HTML);
+  res.set({
+    "Cache-Control": "no-store",
+    "Referrer-Policy": "no-referrer",
+  });
+  res.type("html").send(renderAuthCallbackHtml());
 });
