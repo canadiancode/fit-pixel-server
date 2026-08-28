@@ -47,6 +47,7 @@ curl http://localhost:3001/ready
 | `GET` | `/.well-known/apple-app-site-association` | no | Universal Links stub |
 | `GET` | `/.well-known/assetlinks.json` | no | App Links stub |
 | `GET` | `/auth/callback` | no | Password-reset form (browser → Supabase Auth; anon key only) |
+| `GET` | `/auth/assets/*` | no | Fit Pixel font + input art for the reset page |
 | `POST` | `/v1/sync` | JWT | Ingest outbox ops; `{ acks, serverTime }` |
 | `GET` | `/v1/me` | JWT | `{ id, email }` from verified claims |
 | `GET` | `/v1/habits` | JWT | Stub `501` |

@@ -1,3 +1,4 @@
+import path from "node:path";
 import express from "express";
 import helmet from "helmet";
 import morgan from "morgan";
@@ -13,6 +14,8 @@ import { meRouter } from "./routes/me";
 import { pixelsRouter } from "./routes/pixels";
 import { syncRouter } from "./routes/sync";
 import { wellKnownRouter } from "./routes/well-known";
+
+const AUTH_ASSETS_DIR = path.join(__dirname, "..", "public", "auth");
 
 export function createApp() {
   const app = express();
@@ -33,6 +36,13 @@ export function createApp() {
     }),
   );
 
+  app.use(
+    "/auth/assets",
+    express.static(AUTH_ASSETS_DIR, {
+      index: false,
+      maxAge: "7d",
+    }),
+  );
   app.use(wellKnownRouter);
   app.use(healthRouter);
   app.use("/v1/sync", syncRouter);
@@ -48,3 +58,4 @@ export function createApp() {
 
   return app;
 }
+

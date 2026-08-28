@@ -16,6 +16,8 @@ function pageShell(opts: {
     "default-src 'none'",
     "script-src 'unsafe-inline'",
     "style-src 'unsafe-inline'",
+    "font-src 'self'",
+    "img-src 'self'",
     opts.connectSrc ? `connect-src ${opts.connectSrc}` : null,
     "base-uri 'none'",
     "form-action 'self'",
@@ -33,56 +35,111 @@ function pageShell(opts: {
     <meta http-equiv="Content-Security-Policy" content="${csp}" />
     <title>${opts.title}</title>
     <style>
+      @font-face {
+        font-family: "PressStart2P";
+        src: url("/auth/assets/PressStart2P-Regular.ttf") format("truetype");
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+      }
       :root {
         color-scheme: dark;
-        --bg: #02284f;
         --frame: #03418c;
+        --bg: #02284f;
         --text: #ffffff;
-        --muted: rgba(255, 255, 255, 0.72);
-        --border: rgba(120, 200, 255, 0.55);
-        --fill: rgba(120, 200, 255, 0.12);
+        --muted: #ffffffb8;
+        --placeholder: rgba(255, 255, 255, 0.45);
+        --cta-border: rgba(120, 200, 255, 0.55);
+        --cta-fill: rgba(120, 200, 255, 0.12);
       }
       * { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; }
       body {
-        margin: 0;
         min-height: 100vh;
-        font-family: system-ui, -apple-system, sans-serif;
         background: var(--frame);
         color: var(--text);
+        font-family: "PressStart2P", system-ui, sans-serif;
+        padding: 4px;
       }
-      main {
-        max-width: 28rem;
-        margin: 0 auto;
-        min-height: 100vh;
-        padding: 2.5rem 1.25rem;
+      .shell {
+        min-height: calc(100vh - 8px);
         background: var(--bg);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 28px 20px;
+        gap: 18px;
       }
-      h1 { font-size: 1.35rem; line-height: 1.3; margin: 0 0 1rem; }
-      p, label { font-size: 1rem; line-height: 1.45; color: var(--muted); }
-      form { display: grid; gap: 1rem; margin-top: 1.25rem; }
-      label { display: grid; gap: 0.4rem; color: var(--muted); font-size: 0.85rem; }
-      input {
+      h1 {
+        margin: 0 0 8px;
+        font-size: 22px;
+        line-height: 30px;
+        font-weight: 400;
+        color: var(--text);
+      }
+      p {
+        margin: 0;
+        font-size: 13px;
+        line-height: 18px;
+        color: var(--muted);
+      }
+      form {
+        display: grid;
+        gap: 18px;
+        margin: 0;
+      }
+      .field { display: grid; gap: 6px; }
+      .field-label {
+        font-size: 12px;
+        line-height: 16px;
+        color: var(--muted);
+      }
+      .field-shell {
+        position: relative;
+        height: 52px;
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .field-shell img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: fill;
+        pointer-events: none;
+      }
+      .field-shell input {
+        position: relative;
+        z-index: 1;
+        width: 100%;
+        height: 52px;
+        margin: 0;
+        border: 0;
+        outline: none;
+        background: transparent;
+        color: var(--text);
+        font-family: inherit;
+        font-size: 14px;
+        padding: 0 18px;
+      }
+      .field-shell input::placeholder { color: var(--placeholder); }
+      button.primary {
+        margin-top: 8px;
         width: 100%;
         border-radius: 10px;
-        border: 1px solid rgba(255,255,255,0.2);
-        background: rgba(0,0,0,0.2);
+        border: 1px solid var(--cta-border);
+        background: var(--cta-fill);
         color: var(--text);
-        padding: 0.85rem 1rem;
-        font-size: 1rem;
-      }
-      button {
-        width: 100%;
-        border-radius: 10px;
-        border: 1px solid var(--border);
-        background: var(--fill);
-        color: var(--text);
-        padding: 0.9rem 1rem;
-        font-size: 1rem;
+        font-family: inherit;
+        font-size: 14px;
+        line-height: 20px;
         font-weight: 600;
+        padding: 14px 16px;
         cursor: pointer;
       }
-      button:disabled { opacity: 0.55; cursor: not-allowed; }
-      .error { color: #ffb4b4; }
+      button.primary:active:not(:disabled) { opacity: 0.88; }
+      button.primary:disabled { opacity: 0.55; cursor: not-allowed; }
+      .error { color: var(--muted); }
       [hidden] { display: none !important; }
     </style>
   </head>
@@ -92,16 +149,32 @@ function pageShell(opts: {
 </html>`;
 }
 
+function inputField(opts: {
+  id: string;
+  label: string;
+  placeholder: string;
+}): string {
+  return `<div class="field">
+        <label class="field-label" for="${opts.id}">${opts.label}</label>
+        <div class="field-shell">
+          <img src="/auth/assets/text-input-long.png" alt="" />
+          <input id="${opts.id}" name="${opts.id}" type="password" autocomplete="new-password"
+            placeholder="${opts.placeholder}"
+            minlength="${PASSWORD_MIN}" maxlength="${PASSWORD_MAX}" required />
+        </div>
+      </div>`;
+}
+
 export function renderAuthCallbackHtml(): string {
   const url = getSupabaseUrl();
   const anonKey = env.SUPABASE_ANON_KEY?.trim();
   if (!url || !anonKey) {
     return pageShell({
       title: "Fit Pixel",
-      body: `<main>
+      body: `<div class="shell">
         <h1>Fit Pixel</h1>
         <p>This reset page is not available right now. Request a new reset in the Fit Pixel app later.</p>
-      </main>`,
+      </div>`,
     });
   }
 
@@ -112,24 +185,24 @@ export function renderAuthCallbackHtml(): string {
     passwordMax: PASSWORD_MAX,
   });
 
-  const body = `<main>
-      <h1>Fit Pixel</h1>
+  const body = `<div class="shell">
+      <h1>Reset password</h1>
       <p id="status">Checking reset link…</p>
       <form id="form" hidden>
-        <label>
-          New password
-          <input id="password" name="password" type="password" autocomplete="new-password"
-            minlength="${PASSWORD_MIN}" maxlength="${PASSWORD_MAX}" required />
-        </label>
-        <label>
-          Confirm password
-          <input id="confirm" name="confirm" type="password" autocomplete="new-password"
-            minlength="${PASSWORD_MIN}" maxlength="${PASSWORD_MAX}" required />
-        </label>
-        <button id="submit" type="submit">Save new password</button>
+        ${inputField({
+          id: "password",
+          label: "New password",
+          placeholder: "At least 8 characters",
+        })}
+        ${inputField({
+          id: "confirm",
+          label: "Confirm password",
+          placeholder: "At least 8 characters",
+        })}
+        <button id="submit" class="primary" type="submit">Save new password</button>
       </form>
-      <p id="message" class="error" hidden></p>
-    </main>
+      <p id="message" hidden></p>
+    </div>
     <script>
       const CONFIG = ${configJson};
       const statusEl = document.getElementById("status");
@@ -139,10 +212,9 @@ export function renderAuthCallbackHtml(): string {
       const confirmEl = document.getElementById("confirm");
       const submitEl = document.getElementById("submit");
 
-      function showMessage(text, isError) {
+      function showMessage(text) {
         messageEl.hidden = false;
         messageEl.textContent = text;
-        messageEl.className = isError ? "error" : "";
       }
 
       function copyForStatus(res) {
@@ -236,11 +308,11 @@ export function renderAuthCallbackHtml(): string {
           const confirm = confirmEl.value;
           messageEl.hidden = true;
           if (password.length < CONFIG.passwordMin) {
-            showMessage("Use at least " + CONFIG.passwordMin + " characters.", true);
+            showMessage("Use at least " + CONFIG.passwordMin + " characters.");
             return;
           }
           if (password !== confirm) {
-            showMessage("Passwords do not match.", true);
+            showMessage("Passwords do not match.");
             return;
           }
           submitEl.disabled = true;
@@ -256,9 +328,9 @@ export function renderAuthCallbackHtml(): string {
             const body = await parseJson(res);
             const code = body && body.msg ? String(body.msg) : "";
             if (/weak|password/i.test(code) || res.status === 422) {
-              showMessage("Use at least " + CONFIG.passwordMin + " characters.", true);
+              showMessage("Use at least " + CONFIG.passwordMin + " characters.");
             } else {
-              showMessage(copyForStatus(res), true);
+              showMessage(copyForStatus(res));
             }
             return;
           }
