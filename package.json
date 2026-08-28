@@ -11,7 +11,8 @@
     "db:migrate": "node scripts/apply-migration.mjs",
     "db:check": "node scripts/check-schema.mjs",
     "db:smoke": "node scripts/smoke-connect.mjs",
-    "db:sync-droplet-env": "node scripts/sync-droplet-env.mjs"
+    "db:sync-droplet-env": "node scripts/sync-droplet-env.mjs",
+    "smoke:pilot": "node scripts/pilot-smoke.mjs"
   },
   "repository": {
     "type": "git",

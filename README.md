@@ -37,6 +37,7 @@ curl http://localhost:3001/ready
 | `npm start` | Run compiled `dist/server.js` |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run db:migrate` | Apply `supabase/migrations/*.sql` via `DATABASE_URL` (never prints the URL) |
+| `npm run smoke:pilot` | Signup → sync a water log → food search → gym chat against `https://api.aurashields.com` (deletes the throwaway user) |
 
 ## Endpoints
 
