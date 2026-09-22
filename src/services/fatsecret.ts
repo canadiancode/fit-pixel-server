@@ -83,6 +83,31 @@ async function fetchAccessToken(): Promise<string> {
   return data.access_token;
 }
 
+type FatSecretErrorPayload = {
+  error?: { code?: string | number; message?: string };
+};
+
+function throwIfFatSecretError(data: unknown, httpStatus: number): void {
+  if (!data || typeof data !== "object") return;
+  const err = (data as FatSecretErrorPayload).error;
+  if (!err) return;
+
+  const code = err.code != null ? String(err.code) : undefined;
+  const message = err.message != null ? String(err.message) : "";
+  console.error("FatSecret API error", {
+    status: httpStatus,
+    code,
+    message: message.slice(0, 500),
+  });
+
+  // Invalid / expired token — force a refresh on the next call.
+  if (code === "13") {
+    tokenCache = null;
+  }
+
+  throw new AppError(502, "UPSTREAM_ERROR", "FatSecret API request failed");
+}
+
 async function fatSecretGet(
   path: string,
   params: Record<string, string>,
@@ -101,8 +126,15 @@ async function fatSecretGet(
     },
   });
 
+  const text = await response.text().catch(() => "");
+  let data: unknown = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = null;
+  }
+
   if (!response.ok) {
-    const text = await response.text().catch(() => "");
     console.error("FatSecret API request failed", {
       status: response.status,
       body: text.slice(0, 500),
@@ -110,7 +142,10 @@ async function fatSecretGet(
     throw new AppError(502, "UPSTREAM_ERROR", "FatSecret API request failed");
   }
 
-  return response.json();
+  // FatSecret often returns HTTP 200 with { error: { code, message } }.
+  throwIfFatSecretError(data, response.status);
+
+  return data;
 }
 
 function asArray<T>(value: T | T[] | undefined | null): T[] {
@@ -164,26 +199,30 @@ function normalizeSearchItem(raw: Record<string, unknown>): FoodSearchItem {
   };
 }
 
+type FatSecretFoodList = {
+  total_results?: string | number;
+  results?: { food?: Record<string, unknown> | Record<string, unknown>[] };
+  food?: Record<string, unknown> | Record<string, unknown>[];
+};
+
 export async function searchFoods(options: {
   q: string;
   page: number;
   maxResults: number;
 }): Promise<FoodSearchResponse> {
-  const data = (await fatSecretGet("/foods/search/v3", {
+  // Free / basic edition: foods.search v1. v3+ requires Premier (invalid_scope).
+  const data = (await fatSecretGet("/foods/search/v1", {
     search_expression: options.q,
     page_number: String(options.page),
     max_results: String(options.maxResults),
   })) as {
-    foods_search?: {
-      total_results?: string | number;
-      results?: { food?: Record<string, unknown> | Record<string, unknown>[] };
-      food?: Record<string, unknown> | Record<string, unknown>[];
-    };
+    foods?: FatSecretFoodList;
+    foods_search?: FatSecretFoodList;
   };
 
-  const search = data.foods_search ?? {};
+  const search = data.foods ?? data.foods_search ?? {};
   const foodsRaw = asArray(
-    search.results?.food ?? search.food,
+    search.food ?? search.results?.food,
   ) as Record<string, unknown>[];
 
   const foods = foodsRaw
@@ -260,7 +299,8 @@ function toHabitPayload(
 }
 
 export async function getFoodById(foodId: string): Promise<FoodDetailResponse> {
-  const data = (await fatSecretGet("/food/v4", {
+  // Free / basic edition: food.get v2. v4+ requires Premier.
+  const data = (await fatSecretGet("/food/v2", {
     food_id: foodId,
   })) as {
     food?: {

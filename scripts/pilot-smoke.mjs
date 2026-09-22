@@ -171,14 +171,20 @@ try {
   }
 
   const food = await api("/v1/food/search?q=toast", { token });
-  if (food.status === 200 && Array.isArray(food.body?.foods)) {
+  if (
+    food.status === 200 &&
+    Array.isArray(food.body?.foods) &&
+    food.body.foods.length > 0
+  ) {
     pass(`GET /v1/food/search (${food.body.foods.length} foods)`);
   } else if (food.status === 501) {
     fail("GET /v1/food/search", "501 FatSecret not configured on this host");
   } else {
     fail(
       "GET /v1/food/search",
-      `status ${food.status} code ${food.body?.code ?? ""}`,
+      `status ${food.status} code ${food.body?.code ?? ""} count ${
+        Array.isArray(food.body?.foods) ? food.body.foods.length : "n/a"
+      }`,
     );
   }
 
