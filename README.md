@@ -62,6 +62,7 @@ curl http://localhost:3001/ready
 | `GET` | `/v1/gyms/:gymId` | JWT | One gym |
 | `POST` | `/v1/gyms/:gymId/join` | JWT | Join gym chat |
 | `DELETE` | `/v1/gyms/:gymId/leave` | JWT | Leave gym chat |
+| `POST` | `/v1/gyms/:gymId/favorite` | JWT | Star / un-star `{ favorite }` (joins if needed); gym rows carry `favorite` + `lastVisitedAt` |
 | `GET` | `/v1/gyms/:gymId/messages` | JWT | Gym message history |
 | `POST` | `/v1/gyms/:gymId/messages` | JWT | Send gym message |
 | `GET` | `/v1/me/gym-chats` | JWT | Joined gym chats |

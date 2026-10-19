@@ -28,6 +28,10 @@ export const sendMessageBodySchema = z.object({
     .max(CHAT_LIMITS.messageBodyMax),
 });
 
+export const gymFavoriteBodySchema = z.object({
+  favorite: z.boolean(),
+});
+
 export const createDmBodySchema = z.object({
   peerUserId: z.string().uuid(),
 });
@@ -51,6 +55,10 @@ export type GymListItem = {
   conversationId: string;
   memberCount: number;
   joined: boolean;
+  /** Starred by the caller (only when joined). */
+  favorite: boolean;
+  /** When the caller last opened this chat; null if never / not joined. */
+  lastVisitedAt: string | null;
 };
 
 export type ChatMessage = {
@@ -68,6 +76,8 @@ export type GymChatListItem = {
   imageKey: string | null;
   conversationId: string;
   memberCount: number;
+  favorite: boolean;
+  lastVisitedAt: string | null;
 };
 
 export type DmListItem = {

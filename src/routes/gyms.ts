@@ -9,9 +9,11 @@ import {
   listGymMessages,
   listGyms,
   sendGymMessage,
+  setGymFavorite,
 } from "../services/chat";
 import { AppError } from "../types/api";
 import {
+  gymFavoriteBodySchema,
   gymIdParamSchema,
   messagesQuerySchema,
   sendMessageBodySchema,
@@ -71,6 +73,31 @@ gymsRouter.delete(
         routeParam(req.params.gymId),
       );
       res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** Body `{ favorite: boolean }`. Favouriting joins the gym chat if needed. */
+gymsRouter.post(
+  "/:gymId/favorite",
+  requireAuth,
+  validate(gymIdParamSchema, "params"),
+  validate(gymFavoriteBodySchema),
+  async (req, res, next) => {
+    try {
+      const auth = req.auth;
+      if (!auth) {
+        throw new AppError(401, "UNAUTHORIZED", "Missing auth context");
+      }
+      const gym = await setGymFavorite(
+        createUserSupabaseClient(auth.token),
+        auth.userId,
+        routeParam(req.params.gymId),
+        req.body.favorite,
+      );
+      res.json({ ok: true, gym });
     } catch (err) {
       next(err);
     }

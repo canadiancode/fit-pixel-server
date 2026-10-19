@@ -47,7 +47,7 @@ function mapGym(
   gym: GymRow,
   conversationId: string,
   memberCount: number,
-  joined: boolean,
+  membership: Membership | undefined,
 ): GymListItem {
   return {
     id: gym.id,
@@ -57,7 +57,9 @@ function mapGym(
     imageKey: gym.image_key,
     conversationId,
     memberCount,
-    joined,
+    joined: membership != null,
+    favorite: membership?.favorite ?? false,
+    lastVisitedAt: membership?.lastVisitedAt ?? null,
   };
 }
 
@@ -118,25 +120,47 @@ async function memberCounts(
   return counts;
 }
 
-async function joinedConversationIds(
+type Membership = {
+  favorite: boolean;
+  /** last_read_at: set whenever the member opens the thread. */
+  lastVisitedAt: string | null;
+};
+
+/** The caller's membership rows for these conversations, by conversation id. */
+async function myMemberships(
   supabase: SupabaseClient,
   userId: string,
   conversationIds: string[],
-): Promise<Set<string>> {
-  const joined = new Set<string>();
-  if (conversationIds.length === 0) return joined;
+): Promise<Map<string, Membership>> {
+  const memberships = new Map<string, Membership>();
+  if (conversationIds.length === 0) return memberships;
 
-  const { data, error } = await supabase
-    .from("conversation_members")
-    .select("conversation_id")
-    .eq("user_id", userId)
-    .in("conversation_id", conversationIds);
+  const query = (columns: string) =>
+    supabase
+      .from("conversation_members")
+      .select(columns)
+      .eq("user_id", userId)
+      .in("conversation_id", conversationIds);
+
+  let { data, error } = await query("conversation_id, last_read_at, favorite");
+  // 42703: favorite column missing (20261024000000_gym_favorites.sql not
+  // applied yet). Keep the gym list working without favourites.
+  if (error?.code === "42703") {
+    ({ data, error } = await query("conversation_id, last_read_at"));
+  }
   throwIfError(error);
 
-  for (const row of data ?? []) {
-    joined.add(String(row.conversation_id ?? ""));
+  for (const row of (data ?? []) as unknown as {
+    conversation_id: string;
+    last_read_at: string | null;
+    favorite?: boolean;
+  }[]) {
+    memberships.set(String(row.conversation_id ?? ""), {
+      favorite: row.favorite === true,
+      lastVisitedAt: row.last_read_at ? String(row.last_read_at) : null,
+    });
   }
-  return joined;
+  return memberships;
 }
 
 export async function listGyms(
@@ -161,9 +185,9 @@ export async function listGyms(
   }
 
   const conversationIds = [...convByGym.values()];
-  const [counts, joined] = await Promise.all([
+  const [counts, memberships] = await Promise.all([
     memberCounts(supabase, conversationIds),
-    joinedConversationIds(supabase, userId, conversationIds),
+    myMemberships(supabase, userId, conversationIds),
   ]);
 
   return (gyms ?? []).map((gym) => {
@@ -172,7 +196,7 @@ export async function listGyms(
       gym as GymRow,
       conversationId,
       counts.get(conversationId) ?? 0,
-      joined.has(conversationId),
+      memberships.get(conversationId),
     );
   });
 }
@@ -193,16 +217,16 @@ export async function getGym(
   }
 
   const conversation = await getGymConversation(supabase, gymId);
-  const [counts, joined] = await Promise.all([
+  const [counts, memberships] = await Promise.all([
     memberCounts(supabase, [conversation.id]),
-    joinedConversationIds(supabase, userId, [conversation.id]),
+    myMemberships(supabase, userId, [conversation.id]),
   ]);
 
   return mapGym(
     gym as GymRow,
     conversation.id,
     counts.get(conversation.id) ?? 0,
-    joined.has(conversation.id),
+    memberships.get(conversation.id),
   );
 }
 
@@ -234,10 +258,41 @@ export async function joinGymChat(
       conversation_id: conversation.id,
       user_id: userId,
     },
-    // DO NOTHING on a re-join: clients can only UPDATE last_read_at / muted
-    // (20261023000000_conversation_member_grants.sql).
+    // DO NOTHING on a re-join: clients can only UPDATE last_read_at, muted
+    // and favorite (20261024000000_gym_favorites.sql).
     { onConflict: "conversation_id,user_id", ignoreDuplicates: true },
   );
+  throwIfError(error);
+  return getGym(supabase, userId, gymId);
+}
+
+/** Star or un-star a gym chat. Favouriting a gym you haven't joined joins it. */
+export async function setGymFavorite(
+  supabase: SupabaseClient,
+  userId: string,
+  gymId: string,
+  favorite: boolean,
+): Promise<GymListItem> {
+  const conversation = await getGymConversation(supabase, gymId);
+  if (favorite) {
+    const { error } = await supabase.from("conversation_members").upsert(
+      { conversation_id: conversation.id, user_id: userId },
+      { onConflict: "conversation_id,user_id", ignoreDuplicates: true },
+    );
+    throwIfError(error);
+  }
+  const { error } = await supabase
+    .from("conversation_members")
+    .update({ favorite })
+    .eq("conversation_id", conversation.id)
+    .eq("user_id", userId);
+  if (error?.code === "42703") {
+    throw new AppError(
+      503,
+      "SERVICE_UNAVAILABLE",
+      "Favourites aren't available yet. Try again later.",
+    );
+  }
   throwIfError(error);
   return getGym(supabase, userId, gymId);
 }
@@ -269,6 +324,8 @@ export async function listJoinedGymChats(
       imageKey: gym.imageKey,
       conversationId: gym.conversationId,
       memberCount: gym.memberCount,
+      favorite: gym.favorite,
+      lastVisitedAt: gym.lastVisitedAt,
     }));
 }
 
