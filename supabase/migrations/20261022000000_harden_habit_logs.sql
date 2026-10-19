@@ -12,6 +12,8 @@
 --      src/utils/day-key.ts, and stamps created_at with the server clock.
 --   3. Makes habit_logs read-only to clients; upsert_my_habit_log() is the
 --      only write path. There is no client delete (the sync API has none).
+--   4. Re-buckets a user's day keys when their time zone or day boundary
+--      changes (trigger on prefs), replacing the API's row-by-row rewrite.
 --
 -- `npm run db:migrate` re-applies every file in order and init re-grants
 -- table-wide writes on habit_logs, so this file must stay after it.
@@ -343,3 +345,54 @@ create policy habit_logs_select_own on public.habit_logs
 
 revoke insert, update, delete, truncate on table public.habit_logs from authenticated;
 grant select on table public.habit_logs to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 4. Re-bucket day keys when the day boundary changes
+-- ---------------------------------------------------------------------------
+
+/**
+ * When a user's time_zone or day_starts_at_minutes changes, move their habit
+ * logs into the app days of the new boundary so day_key (and the XP goal
+ * bonuses built on it) follow their local day. Runs in the prefs write's
+ * transaction, whether it came from POST /v1/sync or straight from PostgREST.
+ * Definer: clients can't update habit_logs themselves.
+ */
+create or replace function public.on_prefs_rederive_day_keys()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.habit_logs l
+  set day_key = public.habit_log_day_key(
+    l.timestamp, new.day_starts_at_minutes, new.time_zone
+  )
+  where l.user_id = new.user_id
+    and l.day_key is distinct from public.habit_log_day_key(
+      l.timestamp, new.day_starts_at_minutes, new.time_zone
+    );
+  return null;
+end;
+$$;
+
+revoke all on function public.on_prefs_rederive_day_keys()
+  from public, anon, authenticated;
+
+-- Sync upserts every prefs column, so only fire when the boundary really moves.
+drop trigger if exists prefs_rederive_day_keys on public.prefs;
+create trigger prefs_rederive_day_keys
+  after update of time_zone, day_starts_at_minutes on public.prefs
+  for each row
+  when (
+    old.time_zone is distinct from new.time_zone
+    or old.day_starts_at_minutes is distinct from new.day_starts_at_minutes
+  )
+  execute function public.on_prefs_rederive_day_keys();
+
+-- A first prefs row for a user who already has logs (keyed with the defaults).
+drop trigger if exists prefs_rederive_day_keys_insert on public.prefs;
+create trigger prefs_rederive_day_keys_insert
+  after insert on public.prefs
+  for each row
+  execute function public.on_prefs_rederive_day_keys();

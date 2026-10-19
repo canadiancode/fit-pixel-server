@@ -7,6 +7,16 @@ function pad2(value: number): string {
   return String(value).padStart(2, "0");
 }
 
+/** True when Intl recognises `timeZone` (IANA name or "UTC"). */
+export function isValidTimeZone(timeZone: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-CA", { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function formatDayKeyInTimeZone(date: Date, timeZone: string): string {
   try {
     const parts = new Intl.DateTimeFormat("en-CA", {
