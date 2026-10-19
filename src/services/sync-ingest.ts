@@ -6,8 +6,9 @@ import type {
   SyncAck,
 } from "../types/sync";
 import { trustForOpType } from "../types/sync";
-import { getLocalDayKey } from "../utils/day-key";
+import { getLocalDayKey, isValidTimeZone } from "../utils/day-key";
 import { parseSocialLink } from "../utils/social";
+import { rederiveHabitDayKeys } from "./habit-day-keys";
 import { recomputeXpState } from "./xp-recompute";
 
 type PrefsRow = {
@@ -143,12 +144,16 @@ async function applyProfile(
   throwIfError(error);
 }
 
+/** Returns true when the day boundary changed and habit day keys were re-derived. */
 async function applyPrefs(
   supabase: SupabaseClient,
   userId: string,
   op: Extract<PendingServerOp, { type: "prefs" }>,
-): Promise<void> {
+): Promise<boolean> {
   const p = op.payload;
+  if (p.timeZone !== undefined && !isValidTimeZone(p.timeZone)) {
+    throw new AppError(400, "VALIDATION_ERROR", "Unknown time zone");
+  }
   const existing = await supabase
     .from("prefs")
     .select(
@@ -173,10 +178,31 @@ async function applyPrefs(
     updated_at: updatedAt,
   };
 
+  // Re-bucket habit logs before saving prefs: if this fails the op is not
+  // acked, and the client's retry still sees the old boundary and re-runs it.
+  const boundaryChanged =
+    row.day_starts_at_minutes !==
+      (existing.data?.day_starts_at_minutes ?? 0) ||
+    row.time_zone !== (existing.data?.time_zone ?? "UTC");
+  if (boundaryChanged) {
+    try {
+      await rederiveHabitDayKeys(
+        supabase,
+        userId,
+        row.day_starts_at_minutes,
+        row.time_zone,
+      );
+    } catch (err) {
+      const e = err as { message?: string; code?: string };
+      throwIfError({ message: e.message ?? "Rederive failed", code: e.code });
+    }
+  }
+
   const { error } = await supabase
     .from("prefs")
     .upsert(row, { onConflict: "user_id" });
   throwIfError(error);
+  return boundaryChanged;
 }
 
 async function applySavedMeal(
@@ -318,6 +344,7 @@ async function ingestOne(
     return { ack, recomputeXp: false };
   }
 
+  let boundaryChanged = false;
   try {
     switch (op.type) {
       case "habit_log":
@@ -330,7 +357,7 @@ async function ingestOne(
         await applyProfile(supabase, userId, op);
         break;
       case "prefs":
-        await applyPrefs(supabase, userId, op);
+        boundaryChanged = await applyPrefs(supabase, userId, op);
         break;
       case "saved_meal":
         await applySavedMeal(supabase, userId, op);
@@ -365,7 +392,8 @@ async function ingestOne(
   await recordAck(supabase, userId, op, ack);
   return {
     ack,
-    recomputeXp: op.type === "habit_log" || op.type === "daily_goals",
+    recomputeXp:
+      op.type === "habit_log" || op.type === "daily_goals" || boundaryChanged,
   };
 }
 

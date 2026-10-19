@@ -35,6 +35,38 @@ type DayTotals = {
   activeKcal: number;
 };
 
+/** PostgREST caps a response at 1000 rows by default; page under that. */
+const HABIT_ROW_PAGE = 1000;
+
+async function fetchAllHabitRows(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<HabitRow[]> {
+  const rows: HabitRow[] = [];
+  let after: string | null = null;
+  for (;;) {
+    let query = supabase
+      .from("habit_logs")
+      .select("id,type,day_key,payload")
+      .eq("user_id", userId)
+      .order("id", { ascending: true })
+      .limit(HABIT_ROW_PAGE);
+    if (after) {
+      query = query.gt("id", after);
+    }
+    const { data, error } = await query;
+    if (error) {
+      throw error;
+    }
+    const page = (data ?? []) as HabitRow[];
+    rows.push(...page);
+    if (page.length < HABIT_ROW_PAGE) {
+      return rows;
+    }
+    after = page[page.length - 1].id;
+  }
+}
+
 function emptyTotals(): DayTotals {
   return {
     foodKcal: 0,
@@ -137,24 +169,17 @@ export async function recomputeXpState(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<void> {
-  const [logsResult, goalsResult] = await Promise.all([
-    supabase
-      .from("habit_logs")
-      .select("id,type,day_key,payload")
-      .eq("user_id", userId),
+  const [logs, goalsResult] = await Promise.all([
+    fetchAllHabitRows(supabase, userId),
     supabase.from("daily_goals").select(
       "food_kcal,water_amount,water_unit,train_minutes,sleep_hours,steps,active_kcal",
     ).eq("user_id", userId).maybeSingle(),
   ]);
 
-  if (logsResult.error) {
-    throw logsResult.error;
-  }
   if (goalsResult.error) {
     throw goalsResult.error;
   }
 
-  const logs = (logsResult.data ?? []) as HabitRow[];
   const goals = (goalsResult.data ?? null) as GoalsRow | null;
   const waterUnit = goals?.water_unit ?? "oz";
 
