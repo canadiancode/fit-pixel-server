@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { createUserSupabaseClient } from "../config/supabase";
 import { requireAuth } from "../middleware/require-auth";
+import { safetyWriteRateLimit } from "../middleware/rate-limit";
 import { validate } from "../middleware/validate";
 import { blockUser, listBlockedUsers, unblockUser } from "../services/safety";
 import { AppError } from "../types/api";
@@ -28,6 +29,7 @@ blocksRouter.get("/", requireAuth, async (req, res, next) => {
 blocksRouter.post(
   "/",
   requireAuth,
+  safetyWriteRateLimit,
   validate(blockBodySchema),
   async (req, res, next) => {
     try {

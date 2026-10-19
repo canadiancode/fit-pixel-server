@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { createUserSupabaseClient } from "../config/supabase";
 import { requireAuth } from "../middleware/require-auth";
+import { safetyWriteRateLimit } from "../middleware/rate-limit";
 import { validate } from "../middleware/validate";
 import { createReport } from "../services/safety";
 import { AppError } from "../types/api";
@@ -11,6 +12,7 @@ export const reportsRouter = Router();
 reportsRouter.post(
   "/",
   requireAuth,
+  safetyWriteRateLimit,
   validate(createReportBodySchema),
   async (req, res, next) => {
     try {

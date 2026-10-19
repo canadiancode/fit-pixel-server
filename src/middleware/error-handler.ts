@@ -16,7 +16,7 @@ export function notFoundHandler(
 
 export function errorHandler(
   err: unknown,
-  _req: Request,
+  req: Request,
   res: Response<ApiErrorBody>,
   _next: NextFunction,
 ): void {
@@ -50,9 +50,29 @@ export function errorHandler(
     return;
   }
 
-  if (env.NODE_ENV !== "production") {
-    console.error(err);
+  // express.json(): malformed JSON (400) or a body over the 1 MB limit (413).
+  const bodyError = err as { type?: unknown; status?: unknown };
+  if (
+    bodyError?.type === "entity.parse.failed" ||
+    bodyError?.type === "entity.too.large"
+  ) {
+    const tooLarge = bodyError.type === "entity.too.large";
+    res.status(tooLarge ? 413 : 400).json({
+      ok: false,
+      code: "BAD_REQUEST",
+      message: tooLarge ? "Request body is too large" : "Malformed JSON body",
+    });
+    return;
   }
+
+  // Always log unexpected errors (PM2 keeps stdout/stderr). Method + path only:
+  // no headers, query strings or bodies, which can carry tokens or user data.
+  console.error(
+    `Unhandled error on ${req.method} ${req.path}:`,
+    env.NODE_ENV === "production" && err instanceof Error
+      ? `${err.name}: ${err.message}\n${err.stack ?? ""}`
+      : err,
+  );
 
   res.status(500).json({
     ok: false,

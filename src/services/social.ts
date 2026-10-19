@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { env } from "../config/env";
 import { AppError } from "../types/api";
 import { PIXEL_LAYER_IDS } from "../types/limits";
 import {
@@ -35,9 +34,7 @@ function throwIfError(
   fallback = "Social request failed",
 ): void {
   if (!error) return;
-  if (env.NODE_ENV !== "production") {
-    console.error("Social query failed:", error.code, error.message);
-  }
+  console.error("Social query failed:", error.code, error.message);
   throw new AppError(503, "SERVICE_UNAVAILABLE", fallback);
 }
 

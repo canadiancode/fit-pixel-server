@@ -5,6 +5,7 @@ import morgan from "morgan";
 import { env } from "./config/env";
 import { createCorsMiddleware } from "./middleware/cors";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler";
+import { ipRateLimit } from "./middleware/rate-limit";
 import { blocksRouter } from "./routes/blocks";
 import { dmsRouter } from "./routes/dms";
 import { foodRouter } from "./routes/food";
@@ -12,6 +13,7 @@ import { friendsRouter } from "./routes/friends";
 import { gymsRouter } from "./routes/gyms";
 import { habitsRouter } from "./routes/habits";
 import { healthRouter } from "./routes/health";
+import { legalRouter } from "./routes/legal-html";
 import { meRouter } from "./routes/me";
 import { notificationsRouter } from "./routes/notifications";
 import { pixelsRouter } from "./routes/pixels";
@@ -34,6 +36,7 @@ export function createApp() {
     }),
   );
   app.use(createCorsMiddleware());
+  app.use(ipRateLimit);
   app.use(express.json({ limit: "1mb" }));
   app.use(
     morgan(env.NODE_ENV === "production" ? "combined" : "dev", {
@@ -50,6 +53,7 @@ export function createApp() {
   );
   app.use(wellKnownRouter);
   app.use(healthRouter);
+  app.use(legalRouter);
   app.use("/v1/sync", syncRouter);
   app.use("/v1/me", meRouter);
   app.use("/v1/habits", habitsRouter);

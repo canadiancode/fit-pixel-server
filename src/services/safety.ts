@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { env } from "../config/env";
 import { AppError } from "../types/api";
 import type { BlockedUserItem, CreateReportBody } from "../types/safety";
 
@@ -8,9 +7,7 @@ function throwIfError(
   fallback = "Safety request failed",
 ): void {
   if (!error) return;
-  if (env.NODE_ENV !== "production") {
-    console.error("Safety query failed:", error.code, error.message);
-  }
+  console.error("Safety query failed:", error.code, error.message);
   throw new AppError(503, "SERVICE_UNAVAILABLE", fallback);
 }
 

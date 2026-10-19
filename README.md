@@ -50,6 +50,8 @@ curl http://localhost:3001/ready
 | `GET` | `/.well-known/assetlinks.json` | no | App Links stub |
 | `GET` | `/auth/callback` | no | Password-reset form (browser → Supabase Auth; anon key only) |
 | `GET` | `/auth/assets/*` | no | Fit Pixel font + input art for the reset page |
+| `GET` | `/privacy` | no | Privacy Policy (App Store Connect privacy URL; linked in the app) |
+| `GET` | `/terms` | no | Terms of Use (zero-tolerance UGC rules; agreed to at sign-up) |
 | `POST` | `/v1/sync` | JWT | Ingest outbox ops; `{ acks, serverTime }` |
 | `GET` | `/v1/me` | JWT | `{ id, email }` from verified claims |
 | `GET` | `/v1/habits?after=&limit=` | JWT | Page habit logs by id (default 500, max 1000); `{ logs, nextCursor }` |
@@ -371,7 +373,19 @@ Local files used in production:
 
 ## Next
 
-OAuth / magic-link wait on real Universal Links (replace the TEAMID / SHA-256 stubs). Food rate limits are later.
+OAuth / magic-link wait on real Universal Links (replace the TEAMID / SHA-256 stubs).
+
+## Rate limits
+
+[`src/middleware/rate-limit.ts`](src/middleware/rate-limit.ts), in memory (one PM2 instance; move to Redis before scaling out). 429 with `code: "RATE_LIMITED"`.
+
+- Every route: 600 requests / minute per IP.
+- Per signed-in user, per minute: food search + detail 60, Pixel search 30, reports / blocks / friend requests / new DMs 20.
+- Chat sends are limited in the database (one per 800 ms per room).
+
+## Legal pages
+
+`/privacy` and `/terms` live in [`src/routes/legal-html.ts`](src/routes/legal-html.ts). Set `LEGAL_CONTACT_EMAIL` there before publishing, and bump `LEGAL_EFFECTIVE_DATE` whenever the text changes.
 
 # deploy-test 2026-08-07T04:33:11Z
 

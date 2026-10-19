@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { env } from "../config/env";
 import { AppError } from "../types/api";
 import type {
   PendingServerOp,
@@ -14,9 +13,7 @@ function throwIfError(
   error: { message: string; code?: string } | null,
 ): void {
   if (error) {
-    if (env.NODE_ENV !== "production") {
-      console.error("Sync persist failed:", error.code, error.message);
-    }
+    console.error("Sync persist failed:", error.code, error.message);
     throw new AppError(500, "INTERNAL_ERROR", "Sync persist failed");
   }
 }

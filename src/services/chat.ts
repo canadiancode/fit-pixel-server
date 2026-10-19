@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { env } from "../config/env";
 import { AppError } from "../types/api";
 import type {
   ChatMessage,
@@ -40,9 +39,7 @@ function throwIfError(
   fallback = "Chat request failed",
 ): void {
   if (!error) return;
-  if (env.NODE_ENV !== "production") {
-    console.error("Chat query failed:", error.code, error.message);
-  }
+  console.error("Chat query failed:", error.code, error.message);
   throw new AppError(503, "SERVICE_UNAVAILABLE", fallback);
 }
 
@@ -237,7 +234,9 @@ export async function joinGymChat(
       conversation_id: conversation.id,
       user_id: userId,
     },
-    { onConflict: "conversation_id,user_id" },
+    // DO NOTHING on a re-join: clients can only UPDATE last_read_at / muted
+    // (20261023000000_conversation_member_grants.sql).
+    { onConflict: "conversation_id,user_id", ignoreDuplicates: true },
   );
   throwIfError(error);
   return getGym(supabase, userId, gymId);

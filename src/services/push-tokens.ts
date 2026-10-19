@@ -1,13 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { env } from "../config/env";
 import { AppError } from "../types/api";
 import type { RegisterPushTokenBody } from "../types/push";
 
 function throwIfError(error: { message: string; code?: string } | null): void {
   if (!error) return;
-  if (env.NODE_ENV !== "production") {
-    console.error("Push token query failed:", error.code, error.message);
-  }
+  console.error("Push token query failed:", error.code, error.message);
   throw new AppError(503, "SERVICE_UNAVAILABLE", "Push token request failed");
 }
 

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { validate } from "../middleware/validate";
 import { requireAuth } from "../middleware/require-auth";
+import { foodRateLimit } from "../middleware/rate-limit";
 import {
   getFoodById,
   isFatSecretConfigured,
@@ -15,6 +16,7 @@ export const foodRouter = Router();
 foodRouter.get(
   "/search",
   requireAuth,
+  foodRateLimit,
   validate(foodSearchQuerySchema, "query"),
   async (req, res, next) => {
     try {
@@ -38,7 +40,7 @@ foodRouter.get(
   },
 );
 
-foodRouter.get("/:id", requireAuth, async (req, res, next) => {
+foodRouter.get("/:id", requireAuth, foodRateLimit, async (req, res, next) => {
   try {
     if (!isFatSecretConfigured()) {
       sendNotImplemented(

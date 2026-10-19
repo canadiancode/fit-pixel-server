@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { env } from "../config/env";
 import { AppError } from "../types/api";
 import type {
   FoodMealType,
@@ -35,9 +34,7 @@ function throwIfError(
   error: { message: string; code?: string } | null,
 ): void {
   if (!error) return;
-  if (env.NODE_ENV !== "production") {
-    console.error("Restore query failed:", error.code, error.message);
-  }
+  console.error("Restore query failed:", error.code, error.message);
   throw new AppError(503, "SERVICE_UNAVAILABLE", "Restore request failed");
 }
 

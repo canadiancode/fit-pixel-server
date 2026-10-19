@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { createUserSupabaseClient } from "../config/supabase";
 import { requireAuth } from "../middleware/require-auth";
+import { pixelSearchRateLimit } from "../middleware/rate-limit";
 import { validate } from "../middleware/validate";
 import { searchPixels } from "../services/chat";
 import { getPixelProfile, listPixelLooks } from "../services/social";
@@ -14,6 +15,7 @@ export const pixelsRouter = Router();
 pixelsRouter.get(
   "/search",
   requireAuth,
+  pixelSearchRateLimit,
   validate(pixelSearchQuerySchema, "query"),
   async (req, res, next) => {
     try {

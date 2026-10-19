@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { createUserSupabaseClient } from "../config/supabase";
 import { requireAuth } from "../middleware/require-auth";
+import { safetyWriteRateLimit } from "../middleware/rate-limit";
 import { validate } from "../middleware/validate";
 import {
   listFriends,
@@ -37,6 +38,7 @@ friendsRouter.get("/", requireAuth, async (req, res, next) => {
 friendsRouter.post(
   "/requests",
   requireAuth,
+  safetyWriteRateLimit,
   validate(friendRequestBodySchema),
   async (req, res, next) => {
     try {
