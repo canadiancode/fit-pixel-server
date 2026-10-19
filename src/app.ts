@@ -5,13 +5,18 @@ import morgan from "morgan";
 import { env } from "./config/env";
 import { createCorsMiddleware } from "./middleware/cors";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler";
+import { blocksRouter } from "./routes/blocks";
 import { dmsRouter } from "./routes/dms";
 import { foodRouter } from "./routes/food";
+import { friendsRouter } from "./routes/friends";
 import { gymsRouter } from "./routes/gyms";
 import { habitsRouter } from "./routes/habits";
 import { healthRouter } from "./routes/health";
 import { meRouter } from "./routes/me";
+import { notificationsRouter } from "./routes/notifications";
 import { pixelsRouter } from "./routes/pixels";
+import { pushTokensRouter } from "./routes/push-tokens";
+import { reportsRouter } from "./routes/reports";
 import { syncRouter } from "./routes/sync";
 import { wellKnownRouter } from "./routes/well-known";
 
@@ -52,6 +57,11 @@ export function createApp() {
   app.use("/v1/gyms", gymsRouter);
   app.use("/v1/dms", dmsRouter);
   app.use("/v1/pixels", pixelsRouter);
+  app.use("/v1/blocks", blocksRouter);
+  app.use("/v1/reports", reportsRouter);
+  app.use("/v1/friends", friendsRouter);
+  app.use("/v1/notifications", notificationsRouter);
+  app.use("/v1/push-tokens", pushTokensRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

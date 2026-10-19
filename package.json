@@ -7,6 +7,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
+    "push:worker": "tsx watch src/push-worker.ts",
     "typecheck": "tsc --noEmit",
     "db:migrate": "node scripts/apply-migration.mjs",
     "db:check": "node scripts/check-schema.mjs",
@@ -48,6 +49,7 @@
     "@types/express": "^5.0.6",
     "@types/morgan": "^1.9.10",
     "@types/node": "^26.1.2",
+    "@types/pg": "^8.23.1",
     "tsx": "^4.23.9",
     "typescript": "^7.0.2"
   }

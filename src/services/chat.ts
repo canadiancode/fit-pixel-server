@@ -9,6 +9,8 @@ import type {
   PixelSearchItem,
 } from "../types/chat";
 import { CHAT_LIMITS } from "../types/limits";
+import { blockedUserIds, postgrestInList } from "./safety";
+import { markConversationNotificationsRead, sanitizeEquipped } from "./social";
 
 type GymRow = {
   id: string;
@@ -104,15 +106,17 @@ async function memberCounts(
   const counts = new Map<string, number>();
   if (conversationIds.length === 0) return counts;
 
-  const { data, error } = await supabase
-    .from("conversation_members")
-    .select("conversation_id")
-    .in("conversation_id", conversationIds);
+  // Counted in SQL: one row per gym, and includes members RLS would hide.
+  const { data, error } = await supabase.rpc("gym_member_counts", {
+    conversation_ids: conversationIds,
+  });
   throwIfError(error);
 
-  for (const row of data ?? []) {
-    const id = String(row.conversation_id ?? "");
-    counts.set(id, (counts.get(id) ?? 0) + 1);
+  for (const row of (data ?? []) as {
+    conversation_id: string;
+    member_count: number;
+  }[]) {
+    counts.set(String(row.conversation_id ?? ""), Number(row.member_count ?? 0));
   }
   return counts;
 }
@@ -304,7 +308,8 @@ export async function listMessages(
   conversationId: string,
   options: { before?: string; limit: number },
 ): Promise<ChatMessage[]> {
-  await requireMembership(supabase, userId, conversationId);
+  const conversation = await requireMembership(supabase, userId, conversationId);
+  const blocked = await blockedUserIds(supabase, userId);
 
   let query = supabase
     .from("messages")
@@ -314,6 +319,9 @@ export async function listMessages(
     .order("created_at", { ascending: false })
     .limit(options.limit);
 
+  if (blocked.length > 0) {
+    query = query.not("sender_id", "in", postgrestInList(blocked));
+  }
   if (options.before) {
     query = query.lt("created_at", options.before);
   }
@@ -327,6 +335,9 @@ export async function listMessages(
     rows.map((row) => row.sender_id),
   );
   await markConversationRead(supabase, userId, conversationId);
+  if (conversation.kind === "dm") {
+    await markConversationNotificationsRead(supabase, userId, conversationId);
+  }
   return rows.map((row) => toChatMessage(row, names));
 }
 
@@ -370,6 +381,14 @@ export async function sendMessage(
     })
     .select("id, conversation_id, sender_id, body, created_at, deleted_at")
     .single();
+  // RLS rejects DM inserts once either side has blocked the other.
+  if (error?.code === "42501") {
+    throw new AppError(403, "FORBIDDEN", "You can't message this Pixel");
+  }
+  // DB-side send rate (messages_before_insert) caught a race enforceSendRate missed.
+  if (error?.code === "PT429") {
+    throw new AppError(429, "RATE_LIMITED", "Please wait before sending again");
+  }
   throwIfError(error);
   if (!data) {
     throw new AppError(500, "INTERNAL_ERROR", "Message was not saved");
@@ -433,6 +452,9 @@ export async function createOrGetDm(
     if (/peer not found/i.test(message) || error.code === "P0002") {
       throw new AppError(404, "NOT_FOUND", "Pixel not found");
     }
+    if (/blocked/i.test(message) || error.code === "42501") {
+      throw new AppError(403, "FORBIDDEN", "You can't message this Pixel");
+    }
     throwIfError(error);
   }
   const conversationId = typeof data === "string" ? data : String(data ?? "");
@@ -448,13 +470,20 @@ export async function listDms(
 ): Promise<DmListItem[]> {
   const { data: memberships, error: memberError } = await supabase
     .from("conversation_members")
-    .select("conversation_id")
+    .select("conversation_id, last_read_at")
     .eq("user_id", userId);
   throwIfError(memberError);
 
   const memberIds = (memberships ?? []).map((row) =>
     String(row.conversation_id),
   );
+  const lastReadByConv = new Map<string, string | null>();
+  for (const row of memberships ?? []) {
+    lastReadByConv.set(
+      String(row.conversation_id),
+      row.last_read_at ? String(row.last_read_at) : null,
+    );
+  }
   if (memberIds.length === 0) return [];
 
   const { data: conversations, error: convError } = await supabase
@@ -475,6 +504,7 @@ export async function listDms(
     .neq("user_id", userId);
   throwIfError(peersError);
 
+  const blocked = new Set(await blockedUserIds(supabase, userId));
   const peerByConv = new Map<string, string>();
   for (const row of peers ?? []) {
     peerByConv.set(String(row.conversation_id), String(row.user_id));
@@ -482,34 +512,51 @@ export async function listDms(
 
   const names = await authorNames(supabase, [...peerByConv.values()]);
 
-  const { data: recent, error: recentError } = await supabase
-    .from("messages")
-    .select("conversation_id, body, created_at")
-    .in("conversation_id", conversationIds)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false });
+  const visibleConversationIds = conversationIds.filter(
+    (conversationId) => !blocked.has(peerByConv.get(conversationId) ?? ""),
+  );
+
+  // One row per conversation (its newest message), not every message.
+  const { data: recent, error: recentError } =
+    visibleConversationIds.length > 0
+      ? await supabase.rpc("dm_last_messages", {
+          conversation_ids: visibleConversationIds,
+        })
+      : { data: [], error: null };
   throwIfError(recentError);
 
-  const lastByConv = new Map<string, { body: string; createdAt: string }>();
-  for (const row of recent ?? []) {
+  const lastByConv = new Map<
+    string,
+    { body: string; createdAt: string; senderId: string }
+  >();
+  for (const row of (recent ?? []) as Pick<
+    MessageRow,
+    "conversation_id" | "sender_id" | "body" | "created_at"
+  >[]) {
     const id = String(row.conversation_id);
     if (!lastByConv.has(id)) {
       lastByConv.set(id, {
         body: String(row.body ?? ""),
         createdAt: String(row.created_at),
+        senderId: String(row.sender_id ?? ""),
       });
     }
   }
 
-  const items: DmListItem[] = conversationIds.map((conversationId) => {
+  const items: DmListItem[] = visibleConversationIds.map((conversationId) => {
     const peerUserId = peerByConv.get(conversationId) ?? "";
     const last = lastByConv.get(conversationId);
+    const lastReadAt = lastReadByConv.get(conversationId) ?? null;
     return {
       conversationId,
       peerUserId,
       peerDisplayName: names.get(peerUserId) ?? "Pixel",
       lastMessageBody: last?.body ?? null,
       lastMessageAt: last?.createdAt ?? null,
+      hasUnread:
+        last != null &&
+        last.senderId !== userId &&
+        (lastReadAt == null || last.createdAt > lastReadAt),
     };
   });
 
@@ -527,37 +574,50 @@ export async function searchPixels(
   q: string,
 ): Promise<PixelSearchItem[]> {
   const escaped = q.replace(/[%_\\]/g, "\\$&");
-  const { data, error } = await supabase
-    .from("chat_authors")
-    .select("user_id, display_name")
+  const blocked = await blockedUserIds(supabase, userId);
+  let query = supabase
+    .from("pixel_cards")
+    .select("user_id, display_name, equipped")
     .neq("user_id", userId)
     .ilike("display_name", `%${escaped}%`)
+    .order("display_name", { ascending: true })
     .limit(20);
+  if (blocked.length > 0) {
+    query = query.not("user_id", "in", postgrestInList(blocked));
+  }
+  const [{ data, error }, { data: friendships, error: friendsError }] =
+    await Promise.all([
+      query,
+      supabase
+        .from("friendships")
+        .select("user_lo, user_hi, requester_id, status")
+        .or(`user_lo.eq.${userId},user_hi.eq.${userId}`),
+    ]);
   throwIfError(error);
+  throwIfError(friendsError);
+
+  const friendshipByPeer = new Map<string, PixelSearchItem["friendship"]>();
+  for (const row of friendships ?? []) {
+    const peer = String(row.user_lo === userId ? row.user_hi : row.user_lo);
+    friendshipByPeer.set(
+      peer,
+      row.status === "accepted"
+        ? "friends"
+        : row.requester_id === userId
+          ? "pending_outgoing"
+          : "pending_incoming",
+    );
+  }
 
   return (data ?? [])
-    .map((row) => ({
-      userId: String(row.user_id ?? ""),
-      displayName: String(row.display_name ?? "").trim(),
-    }))
+    .map((row) => {
+      const id = String(row.user_id ?? "");
+      return {
+        userId: id,
+        displayName: String(row.display_name ?? "").trim(),
+        equipped: sanitizeEquipped(row.equipped),
+        friendship: friendshipByPeer.get(id) ?? "none",
+      };
+    })
     .filter((row) => row.userId && row.displayName);
-}
-
-export async function getPixel(
-  supabase: SupabaseClient,
-  userId: string,
-): Promise<PixelSearchItem> {
-  const { data, error } = await supabase
-    .from("chat_authors")
-    .select("user_id, display_name")
-    .eq("user_id", userId)
-    .maybeSingle();
-  throwIfError(error);
-  if (!data) {
-    throw new AppError(404, "NOT_FOUND", "Pixel not found");
-  }
-  return {
-    userId: String(data.user_id),
-    displayName: String(data.display_name ?? "").trim() || "Pixel",
-  };
 }

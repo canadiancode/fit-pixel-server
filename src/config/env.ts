@@ -24,6 +24,8 @@ const envSchema = z.object({
     emptyToUndefined,
     z.string().optional(),
   ),
+  /** Optional: only needed if "Enhanced push security" is on in Expo. */
+  EXPO_ACCESS_TOKEN: z.preprocess(emptyToUndefined, z.string().optional()),
 });
 
 export type Env = z.infer<typeof envSchema>;

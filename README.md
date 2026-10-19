@@ -36,6 +36,7 @@ curl http://localhost:3001/ready
 | `npm run build` | Compile to `dist/` |
 | `npm start` | Run compiled `dist/server.js` |
 | `npm run typecheck` | `tsc --noEmit` |
+| `npm run push:worker` | Run the push worker locally (`tsx watch`; needs `DATABASE_URL`) |
 | `npm run db:migrate` | Apply `supabase/migrations/*.sql` via `DATABASE_URL` (never prints the URL) |
 | `npm run smoke:pilot` | Signup → sync a water log → food search → gym chat against `https://api.aurashields.com` (deletes the throwaway user) |
 
@@ -51,7 +52,8 @@ curl http://localhost:3001/ready
 | `GET` | `/auth/assets/*` | no | Fit Pixel font + input art for the reset page |
 | `POST` | `/v1/sync` | JWT | Ingest outbox ops; `{ acks, serverTime }` |
 | `GET` | `/v1/me` | JWT | `{ id, email }` from verified claims |
-| `GET` | `/v1/habits` | JWT | Stub `501` |
+| `GET` | `/v1/habits?after=&limit=` | JWT | Page habit logs by id (default 500, max 1000); `{ logs, nextCursor }` |
+| `GET` | `/v1/me/snapshot` | JWT | Restore snapshot: profile, prefs, goals, XP, loadout, saved meals, `habitLogCount` |
 | `GET` | `/v1/food/search?q=` | JWT | Live if FatSecret env set; else stub |
 | `GET` | `/v1/food/:id` | JWT | Live if FatSecret env set; else stub |
 | `GET` | `/v1/gyms` | JWT | Gym catalog + member counts + joined |
@@ -61,12 +63,27 @@ curl http://localhost:3001/ready
 | `GET` | `/v1/gyms/:gymId/messages` | JWT | Gym message history |
 | `POST` | `/v1/gyms/:gymId/messages` | JWT | Send gym message |
 | `GET` | `/v1/me/gym-chats` | JWT | Joined gym chats |
-| `GET` | `/v1/dms` | JWT | DM inbox |
+| `GET` | `/v1/dms` | JWT | DM inbox (with `hasUnread`) |
 | `POST` | `/v1/dms` | JWT | Find-or-create DM `{ peerUserId }` |
 | `GET` | `/v1/dms/:conversationId/messages` | JWT | DM history |
 | `POST` | `/v1/dms/:conversationId/messages` | JWT | Send DM |
-| `GET` | `/v1/pixels/search?q=` | JWT | Search display names |
-| `GET` | `/v1/pixels/:userId` | JWT | Public chat author |
+| `GET` | `/v1/pixels/search?q=` | JWT | Search display names; each row has `equipped` look + `friendship` |
+| `GET` | `/v1/pixels/:userId` | JWT | Public Pixel card (`pixel_cards` view) + `friendship` + `isBlocked` |
+| `GET` | `/v1/pixels/looks?ids=a,b` | JWT | Up to 50 Pixels' `equipped` looks (chat avatars) |
+| `GET` | `/v1/friends` | JWT | `{ friends, incoming, outgoing }` |
+| `POST` | `/v1/friends/requests` | JWT | Send friend request `{ userId }` (auto-accepts a crossed request) |
+| `POST` | `/v1/friends/requests/:userId/accept` | JWT | Accept their request |
+| `POST` | `/v1/friends/requests/:userId/decline` | JWT | Decline their request |
+| `DELETE` | `/v1/friends/:userId` | JWT | Unfriend or cancel your request |
+| `GET` | `/v1/notifications` | JWT | Latest 50 notifications + `unreadCount` (friend requests/accepts, DMs) |
+| `POST` | `/v1/notifications/read` | JWT | Mark read `{ ids? }` (omit `ids` for all) |
+| `POST` | `/v1/push-tokens` | JWT | Register this device's Expo push token `{ token, platform: "ios" \| "android" }` (moves it off any other account) |
+| `DELETE` | `/v1/push-tokens` | JWT | Unregister `{ token }` (the app calls this before sign-out) |
+| `DELETE` | `/v1/me` | JWT | Permanently delete the account (`delete_my_account()` RPC; cascades all user rows) |
+| `GET` | `/v1/blocks` | JWT | Pixels the caller has blocked |
+| `POST` | `/v1/blocks` | JWT | Block `{ userId }` — hides their messages, DMs and search results |
+| `DELETE` | `/v1/blocks/:userId` | JWT | Unblock |
+| `POST` | `/v1/reports` | JWT | Report `{ reportedUserId, messageId?, reason, details? }`; review in `content_reports` |
 
 There is **no** `/v1/auth/*`. Signup / login stay client → Supabase Auth. Password reset completes on `GET /auth/callback` (browser talks to Supabase with the anon key).
 
@@ -164,7 +181,8 @@ See [`.env.example`](.env.example). Put real values only in gitignored `.env` (l
 - `SUPABASE_URL` — required for JWT (JWKS). Missing ⇒ authenticated routes 503. `/ready` also needs `SUPABASE_ANON_KEY`.
 - `SUPABASE_ANON_KEY` — user-scoped PostgREST client (with the caller JWT).
 - `SUPABASE_SERVICE_ROLE_KEY` — droplet/local only; unused on request paths; never `EXPO_PUBLIC_*`.
-- `DATABASE_URL` — Postgres URI for `npm run db:migrate`.
+- `DATABASE_URL` — Postgres URI for `npm run db:migrate` and the push worker.
+- `EXPO_ACCESS_TOKEN` — optional; only if "Enhanced push security" is turned on for the Expo project.
 
 FatSecret (optional for food proxy; keep secrets on the server only):
 
@@ -181,6 +199,25 @@ FatSecret (optional for food proxy; keep secrets on the server only):
 - Confirm-email: prefer off for password signup this pass, or HTTPS callback only — never scheme-only `fitpixel://`.
 
 SQL lives in [`supabase/migrations`](supabase/migrations). Apply with `npm run db:migrate` (needs `DATABASE_URL`). GitHub Actions does **not** run migrations — apply once on the droplet after deploy if needed.
+
+## Push notifications
+
+Friend requests, friend accepts and DMs reach the phone as OS pushes through the [Expo Push API](https://docs.expo.dev/push-notifications/sending-notifications/).
+
+```
+notifications insert / DM burst bump
+  └─ trigger notifications_enqueue_push → push_outbox row + pg_notify('push_outbox')
+       └─ fit-pixel-push (PM2, dist/push-worker.js, DATABASE_URL)
+            └─ Expo Push API → APNs / FCM
+```
+
+- **Why a worker, not the API:** sending needs the *recipient's* tokens, which RLS hides from the sender. The API keeps running every request as the caller (user JWT, never the service role); only the worker — a separate droplet process, like `db:migrate` — uses the admin `DATABASE_URL`. It never serves HTTP.
+- **Tables:** `push_tokens` (token PK, `user_id`, `platform`, `updated_at`; RLS select/delete own rows; inserts only via `register_push_token()`, which moves a token to whoever registered it last and keeps 10 per user). `push_outbox` is worker-only (RLS on, no grants).
+- **Delivery:** the worker wakes on `LISTEN push_outbox` and polls every 5 s (a transaction-mode pooler URL has no LISTEN; polling still delivers). It skips rows already read or older than an hour, collapses a DM burst into one push, sets the badge to the unread count, retries 429/5xx with backoff (5 tries), and deletes tokens Expo reports as `DeviceNotRegistered` (ticket or receipt).
+- **Payload `data`:** `{ notificationId, kind, actorId, conversationId }` — the app opens the DM (`dm_message`) or the sender's Pixel card.
+- **Opt-out:** turning off *Friends & messages* in Settings → Notifications, signing out, or denying the iOS permission removes or never registers the token; account deletion cascades.
+- **Deploy:** `deploy.yml` reloads (or first starts) `fit-pixel-push` next to the API. Apply `20261020000000_push_notifications.sql` with `npm run db:migrate`. Check it with `pm2 logs fit-pixel-push`.
+- **APNs:** Expo sends with the APNs key stored in EAS credentials for `com.fitpixel.app` (`eas credentials` → iOS → Push Notifications). No Apple keys live on this server.
 
 ## Sync contract
 
@@ -334,7 +371,7 @@ Local files used in production:
 
 ## Next
 
-OAuth / magic-link wait on real Universal Links (replace the TEAMID / SHA-256 stubs). `GET /v1/habits` and food rate limits are later.
+OAuth / magic-link wait on real Universal Links (replace the TEAMID / SHA-256 stubs). Food rate limits are later.
 
 # deploy-test 2026-08-07T04:33:11Z
 

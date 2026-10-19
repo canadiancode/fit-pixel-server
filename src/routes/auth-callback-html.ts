@@ -3,10 +3,17 @@ import { env, getSupabaseUrl } from "../config/env";
 const PASSWORD_MIN = 8;
 const PASSWORD_MAX = 128;
 
+/** Custom scheme from the Expo app (`app.json` → `scheme`). */
+const APP_OPEN_URL = "fitpixel://";
+
 function jsonForScript(value: unknown): string {
   return JSON.stringify(value).replace(/</g, "\\u003c");
 }
 
+/**
+ * Card layout matching the app's sign-in screen: navy shell, pixel font for
+ * headings / labels / buttons, system font for sentences so they stay legible.
+ */
 function pageShell(opts: {
   title: string;
   connectSrc?: string;
@@ -21,7 +28,7 @@ function pageShell(opts: {
     opts.connectSrc ? `connect-src ${opts.connectSrc}` : null,
     "base-uri 'none'",
     "form-action 'self'",
-    "frame-ancestors 'none'",
+    // frame-ancestors is ignored in <meta>; Helmet's X-Frame-Options covers framing.
   ]
     .filter(Boolean)
     .join("; ");
@@ -32,8 +39,11 @@ function pageShell(opts: {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="referrer" content="no-referrer" />
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#02284f" />
     <meta http-equiv="Content-Security-Policy" content="${csp}" />
     <title>${opts.title}</title>
+    <link rel="icon" type="image/png" href="/auth/assets/favicon.png" />
     <style>
       @font-face {
         font-family: "PressStart2P";
@@ -46,52 +56,81 @@ function pageShell(opts: {
         color-scheme: dark;
         --frame: #03418c;
         --bg: #02284f;
+        --bg-deep: #011a35;
         --text: #ffffff;
         --muted: #ffffffb8;
         --placeholder: rgba(255, 255, 255, 0.45);
-        --cta-border: rgba(120, 200, 255, 0.55);
-        --cta-fill: rgba(120, 200, 255, 0.12);
+        --error: #ff8a8a;
+        --success: #8be28b;
+        --focus: #7cc8ff;
+        --pixel: "PressStart2P", ui-monospace, monospace;
+        --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
       }
       * { box-sizing: border-box; }
-      html, body { margin: 0; min-height: 100%; }
+      html, body { margin: 0; }
       body {
         min-height: 100vh;
-        background: var(--frame);
+        min-height: 100dvh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px 16px;
+        background:
+          radial-gradient(ellipse at top, rgba(3, 65, 140, 0.55), transparent 60%),
+          var(--bg-deep);
         color: var(--text);
-        font-family: "PressStart2P", system-ui, sans-serif;
-        padding: 4px;
+        font-family: var(--sans);
+        -webkit-font-smoothing: antialiased;
       }
-      .shell {
-        min-height: calc(100vh - 8px);
+      .card {
+        width: 100%;
+        max-width: 420px;
         background: var(--bg);
+        border: 4px solid var(--frame);
+        border-radius: 16px;
+        padding: 32px 24px 28px;
+        box-shadow: 0 0 0 4px var(--bg-deep), 0 24px 60px rgba(0, 0, 0, 0.45);
         display: flex;
         flex-direction: column;
-        justify-content: center;
-        padding: 28px 20px;
-        gap: 18px;
+        gap: 20px;
       }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .brand img {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        image-rendering: pixelated;
+      }
+      .brand span {
+        font-family: var(--pixel);
+        font-size: 14px;
+        line-height: 20px;
+        letter-spacing: 0.5px;
+      }
+      .intro { display: grid; gap: 10px; }
       h1 {
-        margin: 0 0 8px;
-        font-size: 22px;
-        line-height: 30px;
+        margin: 0;
+        font-family: var(--pixel);
+        font-size: 18px;
+        line-height: 28px;
         font-weight: 400;
-        color: var(--text);
       }
       p {
         margin: 0;
-        font-size: 13px;
-        line-height: 18px;
+        font-size: 15px;
+        line-height: 22px;
         color: var(--muted);
       }
-      form {
-        display: grid;
-        gap: 18px;
-        margin: 0;
-      }
-      .field { display: grid; gap: 6px; }
+      form { display: grid; gap: 16px; margin: 0; }
+      .field { display: grid; gap: 8px; }
       .field-label {
-        font-size: 12px;
-        line-height: 16px;
+        font-family: var(--pixel);
+        font-size: 10px;
+        line-height: 14px;
         color: var(--muted);
       }
       .field-shell {
@@ -100,6 +139,7 @@ function pageShell(opts: {
         border-radius: 12px;
         overflow: hidden;
       }
+      .field-shell:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
       .field-shell img {
         position: absolute;
         inset: 0;
@@ -118,33 +158,85 @@ function pageShell(opts: {
         outline: none;
         background: transparent;
         color: var(--text);
-        font-family: inherit;
-        font-size: 14px;
+        font-family: var(--sans);
+        font-size: 16px;
         padding: 0 18px;
       }
       .field-shell input::placeholder { color: var(--placeholder); }
-      button.primary {
-        margin-top: 8px;
-        width: 100%;
-        border-radius: 10px;
-        border: 1px solid var(--cta-border);
-        background: var(--cta-fill);
-        color: var(--text);
-        font-family: inherit;
+      .show {
+        display: flex;
+        align-items: center;
+        gap: 10px;
         font-size: 14px;
-        line-height: 20px;
-        font-weight: 600;
+        color: var(--muted);
+        cursor: pointer;
+        user-select: none;
+      }
+      .show input { width: 18px; height: 18px; margin: 0; accent-color: var(--focus); }
+      .btn {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        min-height: 52px;
         padding: 14px 16px;
+        border: 0;
+        border-radius: 8px;
+        overflow: hidden;
+        background: transparent;
+        color: var(--text);
+        font-family: var(--pixel);
+        font-size: 12px;
+        line-height: 16px;
+        text-align: center;
+        text-decoration: none;
         cursor: pointer;
       }
-      button.primary:active:not(:disabled) { opacity: 0.88; }
-      button.primary:disabled { opacity: 0.55; cursor: not-allowed; }
-      .error { color: var(--muted); }
+      .btn img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: fill;
+        pointer-events: none;
+        image-rendering: pixelated;
+      }
+      .btn span { position: relative; z-index: 1; }
+      .btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+      .btn:hover:not(:disabled) { filter: brightness(1.08); }
+      .btn:active:not(:disabled) { opacity: 0.88; }
+      .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+      .message { font-size: 14px; line-height: 20px; }
+      .message.error { color: var(--error); }
+      .message.success { color: var(--success); }
+      .footer {
+        margin: 4px 0 0;
+        padding-top: 16px;
+        border-top: 1px solid rgba(255, 255, 255, 0.12);
+        font-size: 13px;
+        line-height: 18px;
+        color: rgba(255, 255, 255, 0.55);
+      }
       [hidden] { display: none !important; }
+      @media (max-width: 380px) {
+        .card { padding: 24px 18px 22px; }
+        h1 { font-size: 16px; line-height: 24px; }
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .card { animation: rise 240ms ease-out; }
+        @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+      }
     </style>
   </head>
   <body>
-    ${opts.body}
+    <main class="card">
+      <div class="brand">
+        <img src="/auth/assets/app-icon.png" alt="" width="48" height="48" />
+        <span>Fit Pixel</span>
+      </div>
+      ${opts.body}
+    </main>
   </body>
 </html>`;
 }
@@ -155,14 +247,29 @@ function inputField(opts: {
   placeholder: string;
 }): string {
   return `<div class="field">
-        <label class="field-label" for="${opts.id}">${opts.label}</label>
-        <div class="field-shell">
-          <img src="/auth/assets/text-input-long.png" alt="" />
-          <input id="${opts.id}" name="${opts.id}" type="password" autocomplete="new-password"
-            placeholder="${opts.placeholder}"
-            minlength="${PASSWORD_MIN}" maxlength="${PASSWORD_MAX}" required />
-        </div>
-      </div>`;
+          <label class="field-label" for="${opts.id}">${opts.label}</label>
+          <div class="field-shell">
+            <img src="/auth/assets/text-input-long.png" alt="" />
+            <input id="${opts.id}" name="${opts.id}" type="password" autocomplete="new-password"
+              placeholder="${opts.placeholder}"
+              minlength="${PASSWORD_MIN}" maxlength="${PASSWORD_MAX}" required />
+          </div>
+        </div>`;
+}
+
+function primaryButton(opts: {
+  id: string;
+  label: string;
+  type?: "submit";
+  href?: string;
+  hidden?: boolean;
+}): string {
+  const inner = `<img src="/auth/assets/button-primary.png" alt="" /><span>${opts.label}</span>`;
+  const hidden = opts.hidden ? " hidden" : "";
+  if (opts.href) {
+    return `<a id="${opts.id}" class="btn" href="${opts.href}"${hidden}>${inner}</a>`;
+  }
+  return `<button id="${opts.id}" class="btn" type="${opts.type ?? "submit"}"${hidden}>${inner}</button>`;
 }
 
 export function renderAuthCallbackHtml(): string {
@@ -171,9 +278,9 @@ export function renderAuthCallbackHtml(): string {
   if (!url || !anonKey) {
     return pageShell({
       title: "Fit Pixel",
-      body: `<div class="shell">
-        <h1>Fit Pixel</h1>
-        <p>This reset page is not available right now. Request a new reset in the Fit Pixel app later.</p>
+      body: `<div class="intro">
+        <h1>Reset unavailable</h1>
+        <p>This reset page isn't available right now. Request a new reset link from the Fit Pixel app later.</p>
       </div>`,
     });
   }
@@ -185,43 +292,59 @@ export function renderAuthCallbackHtml(): string {
     passwordMax: PASSWORD_MAX,
   });
 
-  const body = `<div class="shell">
-      <h1>Reset password</h1>
-      <p id="status">Checking reset link…</p>
-      <form id="form" hidden>
+  const body = `<div class="intro">
+        <h1 id="title">Reset password</h1>
+        <p id="status" role="status" aria-live="polite">Checking your reset link…</p>
+      </div>
+      <noscript><p class="message error">Turn on JavaScript to reset your password.</p></noscript>
+      <form id="form" hidden novalidate>
         ${inputField({
           id: "password",
           label: "New password",
-          placeholder: "At least 8 characters",
+          placeholder: `At least ${PASSWORD_MIN} characters`,
         })}
         ${inputField({
           id: "confirm",
           label: "Confirm password",
-          placeholder: "At least 8 characters",
+          placeholder: "Type it again",
         })}
-        <button id="submit" class="primary" type="submit">Save new password</button>
+        <label class="show"><input id="show" type="checkbox" /> Show passwords</label>
+        <p id="message" class="message error" role="alert" hidden></p>
+        ${primaryButton({ id: "submit", label: "Save new password" })}
       </form>
-      <p id="message" hidden></p>
-    </div>
+      ${primaryButton({ id: "open-app", label: "Open Fit Pixel", href: APP_OPEN_URL, hidden: true })}
+      <p id="footer" class="footer">Link not working? Request a new one from the Fit Pixel sign-in screen with “Forgot password?”.</p>
     <script>
       const CONFIG = ${configJson};
+      const titleEl = document.getElementById("title");
       const statusEl = document.getElementById("status");
       const formEl = document.getElementById("form");
       const messageEl = document.getElementById("message");
       const passwordEl = document.getElementById("password");
       const confirmEl = document.getElementById("confirm");
+      const showEl = document.getElementById("show");
       const submitEl = document.getElementById("submit");
+      const openAppEl = document.getElementById("open-app");
+      const submitLabelEl = submitEl.querySelector("span");
+      const EXPIRED = "This link is invalid or has expired. Request a new reset link from the Fit Pixel app.";
 
       function showMessage(text) {
         messageEl.hidden = false;
         messageEl.textContent = text;
       }
 
+      function fail(text) {
+        titleEl.textContent = "Link expired";
+        statusEl.textContent = text;
+        // The status already says how to get a new link.
+        document.getElementById("footer").hidden = true;
+      }
+
       function copyForStatus(res) {
         if (res.status === 429) return "Too many attempts. Try again in a few minutes.";
         if (res.status === 422) return "Use at least " + CONFIG.passwordMin + " characters.";
         if (res.status === 0) return "Could not reach the server. Check your connection.";
-        return "This link is invalid or expired. Request a new reset in the Fit Pixel app.";
+        return EXPIRED;
       }
 
       async function parseJson(res) {
@@ -276,31 +399,39 @@ export function renderAuthCallbackHtml(): string {
         if (params.accessToken) {
           return { accessToken: params.accessToken, type: params.type || "recovery" };
         }
-        throw new Error("This link is invalid or expired. Request a new reset in the Fit Pixel app.");
+        throw new Error(EXPIRED);
       }
 
       async function logout(accessToken) {
         await gotrue("/auth/v1/logout?scope=local", { method: "POST", accessToken: accessToken });
       }
 
+      showEl.addEventListener("change", function () {
+        const type = showEl.checked ? "text" : "password";
+        passwordEl.type = type;
+        confirmEl.type = type;
+      });
+
       (async function boot() {
         let recovered;
         try {
           recovered = await recoverAccessToken(takeParams());
         } catch (err) {
-          statusEl.textContent = err instanceof Error ? err.message
-            : "This link is invalid or expired. Request a new reset in the Fit Pixel app.";
+          fail(err instanceof Error ? err.message : EXPIRED);
           return;
         }
 
         if (recovered.type && recovered.type !== "recovery") {
+          titleEl.textContent = "You're all set";
           statusEl.textContent = "Open the Fit Pixel app to continue.";
+          openAppEl.hidden = false;
           await logout(recovered.accessToken);
           return;
         }
 
-        statusEl.textContent = "Choose a new password, then open Fit Pixel and sign in.";
+        statusEl.textContent = "Choose a new password for your Fit Pixel account.";
         formEl.hidden = false;
+        passwordEl.focus();
 
         formEl.addEventListener("submit", async function (event) {
           event.preventDefault();
@@ -309,22 +440,29 @@ export function renderAuthCallbackHtml(): string {
           messageEl.hidden = true;
           if (password.length < CONFIG.passwordMin) {
             showMessage("Use at least " + CONFIG.passwordMin + " characters.");
+            passwordEl.focus();
+            return;
+          }
+          if (password.length > CONFIG.passwordMax) {
+            showMessage("Use at most " + CONFIG.passwordMax + " characters.");
+            passwordEl.focus();
             return;
           }
           if (password !== confirm) {
-            showMessage("Passwords do not match.");
+            showMessage("Passwords don't match.");
+            confirmEl.focus();
             return;
           }
           submitEl.disabled = true;
+          submitLabelEl.textContent = "Saving…";
           const res = await gotrue("/auth/v1/user", {
             method: "PUT",
             accessToken: recovered.accessToken,
             body: { password: password },
           });
-          passwordEl.value = "";
-          confirmEl.value = "";
           if (!res.ok) {
             submitEl.disabled = false;
+            submitLabelEl.textContent = "Save new password";
             const body = await parseJson(res);
             const code = body && body.msg ? String(body.msg) : "";
             if (/weak|password/i.test(code) || res.status === 422) {
@@ -334,9 +472,13 @@ export function renderAuthCallbackHtml(): string {
             }
             return;
           }
+          passwordEl.value = "";
+          confirmEl.value = "";
           await logout(recovered.accessToken);
           formEl.hidden = true;
-          statusEl.textContent = "Password updated. Open Fit Pixel and sign in with your new password.";
+          titleEl.textContent = "Password updated";
+          statusEl.textContent = "Open Fit Pixel and sign in with your new password.";
+          openAppEl.hidden = false;
         });
       })();
     </script>`;

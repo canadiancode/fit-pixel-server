@@ -11,5 +11,16 @@ module.exports = {
         NODE_ENV: "production",
       },
     },
+    {
+      // Drains push_outbox → Expo Push API (see src/push-worker.ts).
+      name: "fit-pixel-push",
+      script: "dist/push-worker.js",
+      cwd: "/var/www/fit-pixel-server",
+      instances: 1,
+      exec_mode: "fork",
+      env: {
+        NODE_ENV: "production",
+      },
+    },
   ],
 };

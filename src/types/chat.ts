@@ -76,9 +76,13 @@ export type DmListItem = {
   peerDisplayName: string;
   lastMessageBody: string | null;
   lastMessageAt: string | null;
+  /** Peer sent the latest message after the caller last opened the thread. */
+  hasUnread: boolean;
 };
 
 export type PixelSearchItem = {
   userId: string;
   displayName: string;
+  equipped: Record<string, string>;
+  friendship: "none" | "pending_outgoing" | "pending_incoming" | "friends";
 };

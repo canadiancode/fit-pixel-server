@@ -6,20 +6,8 @@ import type {
   SyncAck,
 } from "../types/sync";
 import { trustForOpType } from "../types/sync";
-import { getLocalDayKey } from "../utils/day-key";
 import { parseSocialLink } from "../utils/social";
 import { recomputeXpState } from "./xp-recompute";
-
-type PrefsRow = {
-  user_id: string;
-  unit_system: string;
-  selected_theme_id: string;
-  notif_accountability: boolean;
-  notif_news: boolean;
-  day_starts_at_minutes: number;
-  time_zone: string;
-  updated_at: string;
-};
 
 function throwIfError(
   error: { message: string; code?: string } | null,
@@ -32,53 +20,65 @@ function throwIfError(
   }
 }
 
-async function loadPrefs(
-  supabase: SupabaseClient,
-  userId: string,
-): Promise<Pick<PrefsRow, "day_starts_at_minutes" | "time_zone">> {
-  const { data, error } = await supabase
-    .from("prefs")
-    .select("day_starts_at_minutes,time_zone")
-    .eq("user_id", userId)
-    .maybeSingle();
-  throwIfError(error);
+/** Per-batch caches so a 500-op batch costs O(1) lookups, not O(ops). */
+type BatchContext = {
+  /** Acks already stored for this batch's op ids (prefetched + recorded). */
+  acks: Map<string, SyncAck>;
+};
+
+function storedAck(row: {
+  id: string;
+  status: string;
+  reason: string | null;
+}): SyncAck {
   return {
-    day_starts_at_minutes: data?.day_starts_at_minutes ?? 0,
-    time_zone: data?.time_zone ?? "UTC",
+    id: row.id,
+    status: row.status as SyncAck["status"],
+    ...(row.reason ? { reason: row.reason } : {}),
   };
 }
 
+/** One call for the whole batch instead of one sync_ops lookup per op. */
+async function loadStoredAcks(
+  supabase: SupabaseClient,
+  ops: PendingServerOp[],
+): Promise<Map<string, SyncAck>> {
+  const acks = new Map<string, SyncAck>();
+  const ids = [...new Set(ops.map((op) => op.id))];
+  if (ids.length === 0) return acks;
+
+  const { data, error } = await supabase.rpc("my_sync_ops", { op_ids: ids });
+  throwIfError(error);
+  for (const row of (data ?? []) as {
+    id: string;
+    status: string;
+    reason: string | null;
+  }[]) {
+    acks.set(String(row.id), storedAck(row));
+  }
+  return acks;
+}
+
+/**
+ * habit_logs is read-only to clients. upsert_my_habit_log re-validates the
+ * payload, trims notes, derives day_key from the stored prefs and stamps
+ * created_at, so the client's dayKey / createdAt are not sent.
+ */
 async function applyHabitLog(
   supabase: SupabaseClient,
-  userId: string,
   op: Extract<PendingServerOp, { type: "habit_log" }>,
 ): Promise<void> {
-  const prefs = await loadPrefs(supabase, userId);
-  const timestamp = new Date(op.payload.timestamp);
-  const dayKey = getLocalDayKey(
-    timestamp,
-    prefs.day_starts_at_minutes,
-    prefs.time_zone,
-  );
-  const notes =
-    op.payload.notes == null || op.payload.notes.trim() === ""
-      ? null
-      : op.payload.notes.trim();
-
-  const { error } = await supabase.from("habit_logs").upsert(
-    {
-      id: op.payload.id,
-      user_id: userId,
-      type: op.payload.type,
-      timestamp: op.payload.timestamp,
-      created_at: op.payload.createdAt,
-      notes,
-      day_key: dayKey,
-      source: op.payload.source,
-      payload: op.payload.payload,
-    },
-    { onConflict: "user_id,id" },
-  );
+  const { error } = await supabase.rpc("upsert_my_habit_log", {
+    log_id: op.payload.id,
+    log_type: op.payload.type,
+    log_timestamp: op.payload.timestamp,
+    log_source: op.payload.source,
+    log_payload: op.payload.payload,
+    log_notes: op.payload.notes,
+  });
+  if (error?.code === "22023") {
+    throw new AppError(400, "VALIDATION_ERROR", error.message);
+  }
   throwIfError(error);
 }
 
@@ -176,6 +176,7 @@ async function applyPrefs(
   const { error } = await supabase
     .from("prefs")
     .upsert(row, { onConflict: "user_id" });
+  // Later habit_logs in this batch read the new day boundary in the DB.
   throwIfError(error);
 }
 
@@ -269,6 +270,7 @@ async function recordAck(
   userId: string,
   op: PendingServerOp,
   ack: SyncAck,
+  ctx: BatchContext,
 ): Promise<void> {
   const { error } = await supabase.from("sync_ops").insert({
     id: op.id,
@@ -277,35 +279,25 @@ async function recordAck(
     status: ack.status,
     reason: ack.reason ?? null,
   });
-  if (error) {
-    if (error.code === "23505") {
-      return;
-    }
+  if (error && error.code !== "23505") {
     throwIfError(error);
   }
+  // A repeat of this op id later in the batch replays the stored ack.
+  ctx.acks.set(
+    op.id,
+    storedAck({ id: op.id, status: ack.status, reason: ack.reason ?? null }),
+  );
 }
 
 async function ingestOne(
   supabase: SupabaseClient,
   userId: string,
   op: PendingServerOp,
+  ctx: BatchContext,
 ): Promise<{ ack: SyncAck; recomputeXp: boolean }> {
-  const existing = await supabase
-    .from("sync_ops")
-    .select("id,status,reason")
-    .eq("user_id", userId)
-    .eq("id", op.id)
-    .maybeSingle();
-  throwIfError(existing.error);
-  if (existing.data) {
-    return {
-      ack: {
-        id: op.id,
-        status: existing.data.status as SyncAck["status"],
-        ...(existing.data.reason ? { reason: existing.data.reason } : {}),
-      },
-      recomputeXp: false,
-    };
+  const existing = ctx.acks.get(op.id);
+  if (existing) {
+    return { ack: existing, recomputeXp: false };
   }
 
   if (trustForOpType(op.type) === "untrusted_client") {
@@ -314,14 +306,14 @@ async function ingestOne(
       status: "synced",
       reason: "ignored_untrusted",
     };
-    await recordAck(supabase, userId, op, ack);
+    await recordAck(supabase, userId, op, ack, ctx);
     return { ack, recomputeXp: false };
   }
 
   try {
     switch (op.type) {
       case "habit_log":
-        await applyHabitLog(supabase, userId, op);
+        await applyHabitLog(supabase, op);
         break;
       case "daily_goals":
         await applyDailyGoals(supabase, userId, op);
@@ -344,7 +336,7 @@ async function ingestOne(
           status: "rejected",
           reason: "unsupported_type",
         };
-        await recordAck(supabase, userId, op, ack);
+        await recordAck(supabase, userId, op, ack, ctx);
         return { ack, recomputeXp: false };
       }
     }
@@ -355,14 +347,14 @@ async function ingestOne(
         status: "rejected",
         reason: err.message,
       };
-      await recordAck(supabase, userId, op, ack);
+      await recordAck(supabase, userId, op, ack, ctx);
       return { ack, recomputeXp: false };
     }
     throw err;
   }
 
   const ack: SyncAck = { id: op.id, status: "synced" };
-  await recordAck(supabase, userId, op, ack);
+  await recordAck(supabase, userId, op, ack, ctx);
   return {
     ack,
     recomputeXp: op.type === "habit_log" || op.type === "daily_goals",
@@ -376,9 +368,12 @@ export async function ingestSyncOps(
 ): Promise<SyncAck[]> {
   const acks: SyncAck[] = [];
   let recomputeXp = false;
+  const ctx: BatchContext = {
+    acks: await loadStoredAcks(supabase, ops),
+  };
 
   for (const op of ops) {
-    const result = await ingestOne(supabase, userId, op);
+    const result = await ingestOne(supabase, userId, op, ctx);
     acks.push(result.ack);
     if (result.recomputeXp) {
       recomputeXp = true;
@@ -386,7 +381,7 @@ export async function ingestSyncOps(
   }
 
   if (recomputeXp) {
-    await recomputeXpState(supabase, userId);
+    await recomputeXpState(supabase);
   }
 
   return acks;

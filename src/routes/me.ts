@@ -2,6 +2,8 @@ import { Router } from "express";
 import { createUserSupabaseClient } from "../config/supabase";
 import { requireAuth } from "../middleware/require-auth";
 import { listJoinedGymChats } from "../services/chat";
+import { getRestoreSnapshot } from "../services/restore";
+import { deleteOwnAccount } from "../services/safety";
 import { AppError } from "../types/api";
 
 export const meRouter = Router();
@@ -17,6 +19,23 @@ meRouter.get("/gym-chats", requireAuth, async (req, res, next) => {
       auth.userId,
     );
     res.json({ ok: true, chats });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Profile, prefs, goals, XP, loadout and saved meals for restoring a device. */
+meRouter.get("/snapshot", requireAuth, async (req, res, next) => {
+  try {
+    const auth = req.auth;
+    if (!auth) {
+      throw new AppError(401, "UNAUTHORIZED", "Missing auth context");
+    }
+    const snapshot = await getRestoreSnapshot(
+      createUserSupabaseClient(auth.token),
+      auth.userId,
+    );
+    res.json({ ok: true, ...snapshot });
   } catch (err) {
     next(err);
   }
@@ -48,6 +67,20 @@ meRouter.get("/", requireAuth, async (req, res, next) => {
       id: auth.userId,
       email: auth.email ?? "",
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Permanently delete the signed-in account and all of its data. */
+meRouter.delete("/", requireAuth, async (req, res, next) => {
+  try {
+    const auth = req.auth;
+    if (!auth) {
+      throw new AppError(401, "UNAUTHORIZED", "Missing auth context");
+    }
+    await deleteOwnAccount(createUserSupabaseClient(auth.token));
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }
