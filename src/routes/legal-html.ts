@@ -1,9 +1,10 @@
 import { Router } from "express";
 
 /**
- * Privacy Policy and Terms of Use, served at /privacy and /terms.
- * The app links here (Settings → Legal, sign-up) and App Store Connect uses
- * https://api.aurashields.com/privacy as the Privacy Policy URL.
+ * Privacy Policy, Terms of Use and Support, served at /privacy, /terms and
+ * /support. The app links here (Settings → Legal, sign-up) and App Store
+ * Connect uses https://api.aurashields.com/privacy as the Privacy Policy URL
+ * and https://api.aurashields.com/support as the Support URL.
  *
  * Static HTML, no scripts. Keep the text in step with what the app and this
  * server actually collect; bump LEGAL_EFFECTIVE_DATE on every change.
@@ -20,7 +21,12 @@ function contactHtml(): string {
     : "[contact email to be added]";
 }
 
-function legalShell(opts: { title: string; body: string }): string {
+function legalShell(opts: {
+  title: string;
+  body: string;
+  /** Pages that aren't legal text (Support) omit the effective date. */
+  showEffectiveDate?: boolean;
+}): string {
   const csp = [
     "default-src 'none'",
     "style-src 'unsafe-inline'",
@@ -97,9 +103,9 @@ function legalShell(opts: { title: string; body: string }): string {
         <span>Fit Pixel</span>
       </div>
       <h1>${opts.title}</h1>
-      <p class="meta">Effective ${LEGAL_EFFECTIVE_DATE}</p>
+      ${opts.showEffectiveDate === false ? "" : `<p class="meta">Effective ${LEGAL_EFFECTIVE_DATE}</p>`}
       ${opts.body}
-      <nav><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Use</a></nav>
+      <nav><a href="/support">Support</a><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Use</a></nav>
     </main>
   </body>
 </html>`;
@@ -222,6 +228,32 @@ export function renderTermsHtml(): string {
   });
 }
 
+export function renderSupportHtml(): string {
+  return legalShell({
+    title: "Support",
+    showEffectiveDate: false,
+    body: `
+      <p>Questions, bugs or feedback? Email ${contactHtml()} and include the email address you signed up with. We aim to reply within two business days.</p>
+
+      <h2>Your account</h2>
+      <ul>
+        <li><strong>Forgot your password:</strong> on the sign-in screen, tap <strong>Forgot password?</strong> and follow the emailed link.</li>
+        <li><strong>Delete your account:</strong> in the app, go to <strong>Settings → Account info → Delete account</strong>. This permanently removes your account and the data stored on our servers.</li>
+      </ul>
+
+      <h2>Apple Health</h2>
+      <p>Fit Pixel only reads from Apple Health and never writes to it. To change what it can read, open the iPhone <strong>Settings</strong> app → <strong>Health</strong> → <strong>Data Access &amp; Devices</strong> → <strong>Fit Pixel</strong>. You can check what's connected in the app under <strong>Settings → Health &amp; wearables</strong>.</p>
+
+      <h2>Safety in chat</h2>
+      <ul>
+        <li><strong>Report or block:</strong> press and hold a message from another Pixel, then choose <strong>Report message</strong> or <strong>Block</strong>.</li>
+        <li><strong>Unblock:</strong> go to <strong>Settings → Blocked Pixels</strong>.</li>
+        <li>For anything urgent or a safety concern, email ${contactHtml()}.</li>
+      </ul>
+    `,
+  });
+}
+
 export const legalRouter = Router();
 
 legalRouter.get("/privacy", (_req, res) => {
@@ -232,4 +264,9 @@ legalRouter.get("/privacy", (_req, res) => {
 legalRouter.get("/terms", (_req, res) => {
   res.set("Cache-Control", "public, max-age=3600");
   res.type("html").send(renderTermsHtml());
+});
+
+legalRouter.get("/support", (_req, res) => {
+  res.set("Cache-Control", "public, max-age=3600");
+  res.type("html").send(renderSupportHtml());
 });
