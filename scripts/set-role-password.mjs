@@ -1,8 +1,14 @@
 #!/usr/bin/env node
 /**
- * Give the fit_pixel_push role (20261025000000_push_worker_role.sql) LOGIN and a
- * fresh random password, then write PUSH_DATABASE_URL to the local .env.
- * Run `npm run db:migrate` first, then `npm run db:sync-droplet-env` to ship it.
+ * Give a least-privilege role LOGIN and a fresh random password, then write its
+ * connection string to an env file. Run `npm run db:migrate` first.
+ *
+ *   node scripts/set-role-password.mjs <role> <ENV_KEY> [env file] [next step]
+ *
+ * - db:push-role       fit_pixel_push → PUSH_DATABASE_URL in .env
+ *                      (then `npm run db:sync-droplet-env` to ship it)
+ * - db:dashboard-role  fit_pixel_dashboard → DASHBOARD_DATABASE_URL in
+ *                      ../fit-pixel-dashboard/.env.local
  *
  * Never prints the password or a connection string. The password is hashed
  * locally into a SCRAM-SHA-256 verifier, so plaintext never reaches the server
@@ -17,10 +23,14 @@ import dotenv from "dotenv";
 import pg from "pg";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const envPath = join(root, ".env");
-dotenv.config({ path: envPath });
+dotenv.config({ path: join(root, ".env") });
 
-const ROLE = "fit_pixel_push";
+const [ROLE, ENV_KEY, envFile = ".env", nextStep = ""] = process.argv.slice(2);
+if (!/^fit_pixel_[a-z_]+$/.test(ROLE ?? "") || !/^[A-Z_]+$/.test(ENV_KEY ?? "")) {
+  console.error("Usage: node scripts/set-role-password.mjs <role> <ENV_KEY> [env file] [next step]");
+  process.exit(1);
+}
+const envPath = join(root, envFile);
 const SCRAM_ITERATIONS = 4096;
 
 const databaseUrl = process.env.DATABASE_URL?.trim();
@@ -39,8 +49,8 @@ function scramVerifier(password) {
   return `SCRAM-SHA-256$${SCRAM_ITERATIONS}:${salt.toString("base64")}$${storedKey.toString("base64")}:${serverKey.toString("base64")}`;
 }
 
-/** Same URL with the worker's user. Pooler users are `<role>.<project-ref>`. */
-function pushUrl(adminUrl, password) {
+/** Same URL with the role's user. Pooler users are `<role>.<project-ref>`. */
+function roleUrl(adminUrl, password) {
   const url = new URL(adminUrl);
   const user = decodeURIComponent(url.username);
   const dot = user.indexOf(".");
@@ -93,7 +103,5 @@ try {
   await client.end();
 }
 
-upsertEnv("PUSH_DATABASE_URL", pushUrl(databaseUrl, password));
-console.log(
-  `${ROLE} can log in. PUSH_DATABASE_URL written to .env; run npm run db:sync-droplet-env to deploy it.`,
-);
+upsertEnv(ENV_KEY, roleUrl(databaseUrl, password));
+console.log(`${ROLE} can log in. ${ENV_KEY} written to ${envFile}.${nextStep ? ` ${nextStep}` : ""}`);

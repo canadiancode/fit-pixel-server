@@ -39,6 +39,7 @@ curl http://localhost:3001/ready
 | `npm run push:worker` | Run the push worker locally (`tsx watch`; needs `PUSH_DATABASE_URL` or `DATABASE_URL`) |
 | `npm run db:migrate` | Apply `supabase/migrations/*.sql` via `DATABASE_URL` (never prints the URL) |
 | `npm run db:push-role` | Set a fresh password on the push worker's `fit_pixel_push` role and write `PUSH_DATABASE_URL` to `.env` |
+| `npm run db:dashboard-role` | Set a fresh password on the read-only `fit_pixel_dashboard` role and write `DASHBOARD_DATABASE_URL` to `../fit-pixel-dashboard/.env.local` |
 | `npm run smoke:pilot` | Signup → sync a water log → food search → gym chat against `https://api.aurashields.com` (deletes the throwaway user) |
 
 ## Endpoints
