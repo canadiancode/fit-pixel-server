@@ -8,6 +8,12 @@ const emptyToUndefined = (value: unknown) =>
 
 const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3001),
+  /**
+   * Loopback by default: nginx is the only way in, so a firewall slip can't
+   * expose the port (where X-Forwarded-For would dodge the IP rate limit).
+   * 0.0.0.0 to reach a local dev server from a phone on the LAN.
+   */
+  HOST: z.string().trim().min(1).default("127.0.0.1"),
   NODE_ENV: z
     .enum(["development", "production", "test"])
     .default("development"),
@@ -18,6 +24,8 @@ const envSchema = z.object({
     z.string().optional(),
   ),
   DATABASE_URL: z.preprocess(emptyToUndefined, z.string().optional()),
+  /** Push worker's least-privilege login (`npm run db:push-role`). */
+  PUSH_DATABASE_URL: z.preprocess(emptyToUndefined, z.string().optional()),
   SUPABASE_URL: z.preprocess(emptyToUndefined, z.string().optional()),
   SUPABASE_ANON_KEY: z.preprocess(emptyToUndefined, z.string().optional()),
   SUPABASE_SERVICE_ROLE_KEY: z.preprocess(

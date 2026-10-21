@@ -8,6 +8,7 @@
 import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { rootCertificates } from "node:tls";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 
@@ -21,6 +22,17 @@ if (!databaseUrl) {
     "DATABASE_URL is missing. Set it in .env (gitignored) then re-run npm run db:migrate.",
   );
   process.exit(1);
+}
+
+/** Same trust as src/config/db-ssl.ts: Supabase's root plus the public roots. */
+function databaseSsl() {
+  return {
+    rejectUnauthorized: true,
+    ca: [
+      ...rootCertificates,
+      readFileSync(join(root, "certs", "supabase-root-2021-ca.crt"), "utf8"),
+    ],
+  };
 }
 
 const dir = join(root, "supabase", "migrations");
@@ -56,7 +68,7 @@ async function applyWithPg(file) {
   const Client = pg.default?.Client ?? pg.Client;
   const client = new Client({
     connectionString: databaseUrl,
-    ssl: { rejectUnauthorized: false },
+    ssl: databaseSsl(),
   });
   await client.connect();
   try {

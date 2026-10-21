@@ -36,8 +36,9 @@ curl http://localhost:3001/ready
 | `npm run build` | Compile to `dist/` |
 | `npm start` | Run compiled `dist/server.js` |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm run push:worker` | Run the push worker locally (`tsx watch`; needs `DATABASE_URL`) |
+| `npm run push:worker` | Run the push worker locally (`tsx watch`; needs `PUSH_DATABASE_URL` or `DATABASE_URL`) |
 | `npm run db:migrate` | Apply `supabase/migrations/*.sql` via `DATABASE_URL` (never prints the URL) |
+| `npm run db:push-role` | Set a fresh password on the push worker's `fit_pixel_push` role and write `PUSH_DATABASE_URL` to `.env` |
 | `npm run smoke:pilot` | Signup → sync a water log → food search → gym chat against `https://api.aurashields.com` (deletes the throwaway user) |
 
 ## Endpoints
@@ -183,8 +184,10 @@ See [`.env.example`](.env.example). Put real values only in gitignored `.env` (l
 
 - `SUPABASE_URL` — required for JWT (JWKS). Missing ⇒ authenticated routes 503. `/ready` also needs `SUPABASE_ANON_KEY`.
 - `SUPABASE_ANON_KEY` — user-scoped PostgREST client (with the caller JWT).
-- `SUPABASE_SERVICE_ROLE_KEY` — droplet/local only; unused on request paths; never `EXPO_PUBLIC_*`.
-- `DATABASE_URL` — Postgres URI for `npm run db:migrate` and the push worker.
+- `SUPABASE_SERVICE_ROLE_KEY` — local only (smoke / `db:check` scripts); not on the droplet (`db:sync-droplet-env` removes it); never `EXPO_PUBLIC_*`.
+- `DATABASE_URL` — admin Postgres URI for `npm run db:migrate`. Leave `sslmode` out: connections verify TLS against [`certs/supabase-root-2021-ca.crt`](certs/supabase-root-2021-ca.crt) plus the public roots.
+- `PUSH_DATABASE_URL` — the push worker's `fit_pixel_push` login (see Push notifications); `npm run db:push-role` writes it.
+- `HOST` — listen address, default `127.0.0.1` (nginx proxies to it). Set `0.0.0.0` only to reach a local dev server from a phone on the LAN.
 - `EXPO_ACCESS_TOKEN` — optional; only if "Enhanced push security" is turned on for the Expo project.
 
 FatSecret (optional for food proxy; keep secrets on the server only):
@@ -210,11 +213,12 @@ Friend requests, friend accepts and DMs reach the phone as OS pushes through the
 ```
 notifications insert / DM burst bump
   └─ trigger notifications_enqueue_push → push_outbox row + pg_notify('push_outbox')
-       └─ fit-pixel-push (PM2, dist/push-worker.js, DATABASE_URL)
+       └─ fit-pixel-push (PM2, dist/push-worker.js, PUSH_DATABASE_URL)
             └─ Expo Push API → APNs / FCM
 ```
 
-- **Why a worker, not the API:** sending needs the *recipient's* tokens, which RLS hides from the sender. The API keeps running every request as the caller (user JWT, never the service role); only the worker — a separate droplet process, like `db:migrate` — uses the admin `DATABASE_URL`. It never serves HTTP.
+- **Why a worker, not the API:** sending needs the *recipient's* tokens, which RLS hides from the sender. The API keeps running every request as the caller (user JWT, never the service role); only the worker — a separate droplet process — reads across users, and it logs in as `fit_pixel_push` ([`20261025000000_push_worker_role.sql`](supabase/migrations/20261025000000_push_worker_role.sql)), which can only touch `push_outbox`, the notification columns a push needs, `profiles.display_name` and `push_tokens` (read / delete). It falls back to the admin `DATABASE_URL` (with a log line) until `PUSH_DATABASE_URL` is set. It never serves HTTP.
+- **Worker login setup:** `npm run db:migrate`, then `npm run db:push-role` (gives the role LOGIN and a random password, hashed locally to SCRAM so plaintext never reaches the server, and writes `PUSH_DATABASE_URL` to `.env`; re-run to rotate), then `npm run db:sync-droplet-env`.
 - **Tables:** `push_tokens` (token PK, `user_id`, `platform`, `updated_at`; RLS select/delete own rows; inserts only via `register_push_token()`, which moves a token to whoever registered it last and keeps 10 per user). `push_outbox` is worker-only (RLS on, no grants).
 - **Delivery:** the worker wakes on `LISTEN push_outbox` and polls every 5 s (a transaction-mode pooler URL has no LISTEN; polling still delivers). It skips rows already read or older than an hour, collapses a DM burst into one push, sets the badge to the unread count, retries 429/5xx with backoff (5 tries), and deletes tokens Expo reports as `DeviceNotRegistered` (ticket or receipt).
 - **Payload `data`:** `{ notificationId, kind, actorId, conversationId }` — the app opens the DM (`dm_message`) or the sender's Pixel card.
@@ -330,9 +334,9 @@ Edit server env (never commit):
 ```bash
 nano /var/www/fit-pixel-server/.env
 # NODE_ENV=production, PORT=3001, CORS_ORIGINS= (empty)
-# SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, DATABASE_URL
+# SUPABASE_URL, SUPABASE_ANON_KEY, DATABASE_URL, PUSH_DATABASE_URL
 # plus FatSecret when used
-pm2 reload fit-pixel-api --update-env
+pm2 reload fit-pixel-api fit-pixel-push --update-env
 ```
 
 Apply SQL once (does not print the URL):

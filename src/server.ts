@@ -13,8 +13,8 @@ process.on("uncaughtException", (err) => {
 
 const app = createApp();
 
-app.listen(env.PORT, () => {
+app.listen(env.PORT, env.HOST, () => {
   console.log(
-    `Fit Pixel API listening on http://localhost:${env.PORT} (${env.NODE_ENV})`,
+    `Fit Pixel API listening on http://${env.HOST}:${env.PORT} (${env.NODE_ENV})`,
   );
 });

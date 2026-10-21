@@ -2,12 +2,14 @@
  * Push worker (PM2 app `fit-pixel-push`, separate from the API process).
  *
  * Drains `public.push_outbox` — filled by a trigger on `public.notifications` —
- * and sends through the Expo Push API. Connects with DATABASE_URL (the droplet's
- * admin connection) because it must read other users' push tokens; the API
- * request paths never do. Wakes on `LISTEN push_outbox` and also polls, so a
- * pooled connection without LISTEN support still delivers.
+ * and sends through the Expo Push API. Connects as the fit_pixel_push role
+ * (PUSH_DATABASE_URL, see 20261025000000_push_worker_role.sql) because it must
+ * read other users' push tokens; the API request paths never do. Falls back to
+ * the admin DATABASE_URL until that is set. Wakes on `LISTEN push_outbox` and
+ * also polls, so a pooled connection without LISTEN support still delivers.
  */
 import pg from "pg";
+import { databaseSsl, withoutSslParams } from "./config/db-ssl";
 import { env } from "./config/env";
 import {
   EXPO_RECEIPT_CHUNK,
@@ -68,7 +70,7 @@ function log(message: string, extra?: Record<string, unknown>): void {
 function createPool(connectionString: string): pg.Pool {
   return new pg.Pool({
     connectionString,
-    ssl: { rejectUnauthorized: false },
+    ssl: databaseSsl(),
     max: 2,
   });
 }
@@ -254,7 +256,7 @@ function startListener(connectionString: string, onWake: () => void): () => void
     if (stopped) return;
     const next = new pg.Client({
       connectionString,
-      ssl: { rejectUnauthorized: false },
+      ssl: databaseSsl(),
     });
     const retry = () => {
       if (client !== next) return;
@@ -289,11 +291,17 @@ function startListener(connectionString: string, onWake: () => void): () => void
 }
 
 function main(): void {
-  const connectionString = env.DATABASE_URL;
-  if (!connectionString) {
-    console.error("[push] DATABASE_URL is missing; the push worker cannot start.");
+  const rawConnectionString = env.PUSH_DATABASE_URL ?? env.DATABASE_URL;
+  if (!rawConnectionString) {
+    console.error(
+      "[push] PUSH_DATABASE_URL and DATABASE_URL are missing; the push worker cannot start.",
+    );
     process.exit(1);
   }
+  if (!env.PUSH_DATABASE_URL) {
+    log("PUSH_DATABASE_URL is not set; using the admin DATABASE_URL (run npm run db:push-role)");
+  }
+  const connectionString = withoutSslParams(rawConnectionString);
   const pool = createPool(connectionString);
   pool.on("error", (err) => log("pool error", { error: err.message }));
 
