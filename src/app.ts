@@ -10,6 +10,7 @@ import { blocksRouter } from "./routes/blocks";
 import { dmsRouter } from "./routes/dms";
 import { foodRouter } from "./routes/food";
 import { friendsRouter } from "./routes/friends";
+import { gymSubmissionsRouter } from "./routes/gym-submissions";
 import { gymsRouter } from "./routes/gyms";
 import { habitsRouter } from "./routes/habits";
 import { healthRouter } from "./routes/health";
@@ -59,6 +60,7 @@ export function createApp() {
   app.use("/v1/habits", habitsRouter);
   app.use("/v1/food", foodRouter);
   app.use("/v1/gyms", gymsRouter);
+  app.use("/v1/gym-submissions", gymSubmissionsRouter);
   app.use("/v1/dms", dmsRouter);
   app.use("/v1/pixels", pixelsRouter);
   app.use("/v1/blocks", blocksRouter);

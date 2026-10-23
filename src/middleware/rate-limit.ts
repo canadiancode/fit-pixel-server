@@ -56,3 +56,5 @@ export const foodRateLimit = userRateLimit(60);
 export const pixelSearchRateLimit = userRateLimit(30);
 /** Reports, blocks and friend requests: a person does a few, a script many. */
 export const safetyWriteRateLimit = userRateLimit(20);
+/** Gym suggestions: a few in a sitting, never dozens. */
+export const gymSubmissionRateLimit = userRateLimit(10, 60 * 60_000);

@@ -9,6 +9,8 @@
  *                      (then `npm run db:sync-droplet-env` to ship it)
  * - db:dashboard-role  fit_pixel_dashboard → DASHBOARD_DATABASE_URL in
  *                      ../fit-pixel-dashboard/.env.local
+ * - db:gym-reviewer-role  fit_pixel_gym_reviewer → GYM_REVIEWER_DATABASE_URL in
+ *                      ../fit-pixel-dashboard/.env.local (Approve / Reject gyms)
  *
  * Never prints the password or a connection string. The password is hashed
  * locally into a SCRAM-SHA-256 verifier, so plaintext never reaches the server
