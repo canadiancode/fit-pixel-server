@@ -71,6 +71,7 @@ export const PIXEL_LAYER_IDS = [
   "background",
   "skin",
   "eyes",
+  "nose",
   "mouth",
   "top",
   "bottom",
