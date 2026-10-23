@@ -40,6 +40,7 @@ curl http://localhost:3001/ready
 | `npm run db:migrate` | Apply `supabase/migrations/*.sql` via `DATABASE_URL` (never prints the URL) |
 | `npm run db:push-role` | Set a fresh password on the push worker's `fit_pixel_push` role and write `PUSH_DATABASE_URL` to `.env` |
 | `npm run db:dashboard-role` | Set a fresh password on the read-only `fit_pixel_dashboard` role and write `DASHBOARD_DATABASE_URL` to `../fit-pixel-dashboard/.env.local` |
+| `npm run db:gym-reviewer-role` | Set a fresh password on `fit_pixel_gym_reviewer` (can only approve / reject gym submissions) and write `GYM_REVIEWER_DATABASE_URL` to `../fit-pixel-dashboard/.env.local` |
 | `npm run smoke:pilot` | Signup → sync a water log → food search → gym chat against `https://api.aurashields.com` (deletes the throwaway user) |
 
 ## Endpoints
@@ -68,6 +69,8 @@ curl http://localhost:3001/ready
 | `GET` | `/v1/gyms/:gymId/messages` | JWT | Gym message history |
 | `POST` | `/v1/gyms/:gymId/messages` | JWT | Send gym message |
 | `GET` | `/v1/me/gym-chats` | JWT | Joined gym chats |
+| `POST` | `/v1/gym-submissions` | JWT | Suggest a gym `{ name, latitude, longitude, address?, kind?, notes? }`; pending until approved in the dashboard (10/hour, 10 pending max) |
+| `GET` | `/v1/gym-submissions/mine` | JWT | Your gym suggestions with `status` (`pending` / `approved` / `rejected`) and `reviewerNotes` |
 | `GET` | `/v1/dms` | JWT | DM inbox (with `hasUnread`) |
 | `POST` | `/v1/dms` | JWT | Find-or-create DM `{ peerUserId }` |
 | `GET` | `/v1/dms/:conversationId/messages` | JWT | DM history |

@@ -14,6 +14,7 @@
     "db:smoke": "node scripts/smoke-connect.mjs",
     "db:push-role": "node scripts/set-role-password.mjs fit_pixel_push PUSH_DATABASE_URL .env \"Run npm run db:sync-droplet-env to deploy it.\"",
     "db:dashboard-role": "node scripts/set-role-password.mjs fit_pixel_dashboard DASHBOARD_DATABASE_URL ../fit-pixel-dashboard/.env.local",
+    "db:gym-reviewer-role": "node scripts/set-role-password.mjs fit_pixel_gym_reviewer GYM_REVIEWER_DATABASE_URL ../fit-pixel-dashboard/.env.local \"Restart the dashboard to turn on Approve / Reject.\"",
     "db:sync-droplet-env": "node scripts/sync-droplet-env.mjs",
     "smoke:pilot": "node scripts/pilot-smoke.mjs"
   },
