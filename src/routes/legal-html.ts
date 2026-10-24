@@ -10,10 +10,10 @@ import { Router } from "express";
  * server actually collect; bump LEGAL_EFFECTIVE_DATE on every change.
  */
 
-/** TODO: replace with a real, monitored inbox (e.g. a support@ alias) before publishing. */
-const LEGAL_CONTACT_EMAIL: string | null = null;
+/** The monitored Fit Pixel inbox (Google Workspace). */
+const LEGAL_CONTACT_EMAIL: string | null = "hello@fitpixel.app";
 
-const LEGAL_EFFECTIVE_DATE = "October 19, 2026";
+const LEGAL_EFFECTIVE_DATE = "October 23, 2026";
 
 function contactHtml(): string {
   return LEGAL_CONTACT_EMAIL
@@ -193,7 +193,7 @@ export function renderTermsHtml(): string {
         <li>is spam, scams, or unsolicited advertising;</li>
         <li>shares someone else's personal information without permission.</li>
       </ul>
-      <p>You can report any message or user and block anyone from their profile or chat. We review reports and aim to act within 24 hours, which can include removing content and suspending or permanently banning the account responsible.</p>
+      <p>Messages, display names and bios are automatically filtered: hateful, sexual and threatening content is blocked before anyone sees it, and mild swearing is masked. You can report any message or user and block anyone from their profile or chat. We review reports and aim to act within 24 hours, which can include removing content and suspending or permanently banning the account responsible.</p>
 
       <h2>Your content</h2>
       <p>You own what you post. You give us a limited licence to store, display and deliver it to provide the service (for example, showing your messages to the people in a chat). We may remove content that breaks these terms.</p>

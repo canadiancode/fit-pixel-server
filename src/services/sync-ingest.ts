@@ -102,6 +102,11 @@ async function applyDailyGoals(
     },
     { onConflict: "user_id" },
   );
+  // The content filter (profiles_moderate) refused the name or bio. Reject the
+  // op so the app stops retrying it; nobody else ever sees the text.
+  if (error?.code === "PT422") {
+    throw new AppError(400, "VALIDATION_ERROR", error.message);
+  }
   throwIfError(error);
 }
 

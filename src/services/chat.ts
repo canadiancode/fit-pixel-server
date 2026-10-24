@@ -441,6 +441,14 @@ export async function sendMessage(
   if (error?.code === "42501") {
     throw new AppError(403, "FORBIDDEN", "You can't message this Pixel");
   }
+  // The content filter (messages_moderate, 20261030000000_content_moderation.sql).
+  if (error?.code === "PT422") {
+    throw new AppError(
+      422,
+      "CONTENT_BLOCKED",
+      "That message breaks our community rules. Keep it friendly.",
+    );
+  }
   // DB-side send rate (messages_before_insert) caught a race enforceSendRate missed.
   if (error?.code === "PT429") {
     throw new AppError(429, "RATE_LIMITED", "Please wait before sending again");

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AppError } from "../types/api";
+import { sendReportAlert } from "./alerts";
 import type { BlockedUserItem, CreateReportBody } from "../types/safety";
 
 function throwIfError(
@@ -127,21 +128,64 @@ export async function createReport(
     messageBody = String(message.body ?? "");
   }
 
-  const { error } = await supabase.from("content_reports").insert({
-    reporter_id: userId,
-    reported_user_id: input.reportedUserId,
-    conversation_id: conversationId,
-    message_id: input.messageId ?? null,
-    message_body: messageBody,
-    reason: input.reason,
-    details: input.details || null,
-  });
+  const { data: report, error } = await supabase
+    .from("content_reports")
+    .insert({
+      reporter_id: userId,
+      reported_user_id: input.reportedUserId,
+      conversation_id: conversationId,
+      message_id: input.messageId ?? null,
+      message_body: messageBody,
+      reason: input.reason,
+      details: input.details || null,
+    })
+    .select("id, created_at")
+    .single();
   // Same reporter + message twice: already on file, treat as success.
   if (error?.code === "23505") return;
   if (error?.code === "23503") {
     throw new AppError(404, "NOT_FOUND", "Pixel not found");
   }
   throwIfError(error);
+
+  // Tell the owner straight away (Guideline 1.2: act on reports within 24h).
+  // Fire and forget: the report is saved whether or not the email goes out.
+  void (async () => {
+    const names = await displayNames(supabase, [userId, input.reportedUserId]).catch(
+      () => new Map<string, string>(),
+    );
+    await sendReportAlert({
+      reportId: String(report?.id ?? ""),
+      createdAt: String(report?.created_at ?? new Date().toISOString()),
+      reason: input.reason,
+      details: input.details || null,
+      reporterId: userId,
+      reporterName: names.get(userId) ?? "Pixel",
+      reportedUserId: input.reportedUserId,
+      reportedName: names.get(input.reportedUserId) ?? "Pixel",
+      conversationId,
+      messageId: input.messageId ?? null,
+      messageBody,
+    });
+  })();
+}
+
+/** Display names through the chat_authors view (the only cross-user name read). */
+async function displayNames(
+  supabase: SupabaseClient,
+  userIds: string[],
+): Promise<Map<string, string>> {
+  const { data, error } = await supabase
+    .from("chat_authors")
+    .select("user_id, display_name")
+    .in("user_id", userIds);
+  throwIfError(error);
+  return new Map(
+    (data ?? []).map((row) => [
+      String(row.user_id),
+      String(row.display_name ?? "").trim() || "Pixel",
+    ]),
+  );
 }
 
 /** Calls the security-definer RPC; cascades remove all of the user's rows. */

@@ -32,6 +32,15 @@ const envSchema = z.object({
     emptyToUndefined,
     z.string().optional(),
   ),
+  /**
+   * Resend API key for safety alerts (a report was filed). Alerts are only
+   * logged until it is set.
+   */
+  RESEND_API_KEY: z.preprocess(emptyToUndefined, z.string().optional()),
+  /** Where report alerts go. */
+  ALERT_EMAIL_TO: z.string().trim().email().default("hello@fitpixel.app"),
+  /** Sender for alerts; its domain must be verified in Resend. */
+  ALERT_EMAIL_FROM: z.string().trim().min(3).default("Fit Pixel Alerts <alerts@fitpixel.app>"),
   /** Optional: only needed if "Enhanced push security" is on in Expo. */
   EXPO_ACCESS_TOKEN: z.preprocess(emptyToUndefined, z.string().optional()),
 });
