@@ -21,6 +21,7 @@ import { pixelsRouter } from "./routes/pixels";
 import { pushTokensRouter } from "./routes/push-tokens";
 import { reportsRouter } from "./routes/reports";
 import { syncRouter } from "./routes/sync";
+import { waitlistRouter } from "./routes/waitlist";
 import { wellKnownRouter } from "./routes/well-known";
 
 const AUTH_ASSETS_DIR = path.join(__dirname, "..", "public", "auth");
@@ -36,6 +37,8 @@ export function createApp() {
       contentSecurityPolicy: false,
     }),
   );
+  // Public website form: its own CORS (fitpixel.app), so it goes first.
+  app.use("/v1/waitlist", waitlistRouter);
   app.use(createCorsMiddleware());
   app.use(ipRateLimit);
   app.use(express.json({ limit: "1mb" }));
