@@ -34,17 +34,22 @@ select public.moderation_check('your text here', false);
 
 ## Reports
 
-Every report is saved in `public.content_reports` and emailed to `ALERT_EMAIL_TO` (hello@fitpixel.app) through Resend. The email includes the reason, the reported message, both users, and the SQL to act on it.
+Every report is saved in `public.content_reports` and emailed to `ALERT_EMAIL_TO` (hello@fitpixel.app). The email includes the reason, the reported message, both users, and the SQL to act on it. Until the server can send mail, alerts are only written to the API log.
 
-Until `RESEND_API_KEY` is set on the server, alerts are only written to the API log. Set it up once:
+The server sends through the Google Workspace inbox. Set it up once:
 
-1. Create a free account at resend.com and add the domain **fitpixel.app**.
-2. Add the DNS records Resend shows (SPF/DKIM) at GoDaddy, **next to** the Google Workspace records. Don't replace them.
-3. Create an API key and put it in `fit-pixel-server/.env` as `RESEND_API_KEY=…`.
-4. `npm run db:sync-droplet-env` copies it to the droplet and reloads the API.
+1. Turn on 2-Step Verification for hello@fitpixel.app (myaccount.google.com → Security).
+2. Create an **app password** there (Security → 2-Step Verification → App passwords), named "Fit Pixel server". Google shows 16 characters once.
+3. In `fit-pixel-server/.env` (never `.env.example`):
+   ```
+   SMTP_USER=hello@fitpixel.app
+   SMTP_PASS=<the 16-character app password, no spaces>
+   ```
+   `SMTP_HOST` and `SMTP_PORT` default to smtp.gmail.com and 465.
+4. `npm run db:sync-droplet-env` copies them to the droplet and reloads the API.
 5. File a test report from the app and check that the email arrives.
 
-The same Resend account can also be Supabase's custom SMTP sender for sign-up and password-reset emails.
+You can use the same app password for Supabase's custom SMTP (sign-up and password-reset emails). A Resend API key (`RESEND_API_KEY`) also works instead of SMTP.
 
 **Open reports**, any time:
 

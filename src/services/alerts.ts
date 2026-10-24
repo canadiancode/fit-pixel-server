@@ -1,3 +1,4 @@
+import nodemailer, { type Transporter } from "nodemailer";
 import { env } from "../config/env";
 
 const RESEND_URL = "https://api.resend.com/emails";
@@ -91,14 +92,45 @@ ${rows
   return { subject, text, html };
 }
 
+let smtp: Transporter | null = null;
+
+function smtpTransport(): Transporter {
+  smtp ??= nodemailer.createTransport({
+    host: env.SMTP_HOST,
+    port: env.SMTP_PORT,
+    secure: env.SMTP_PORT === 465,
+    auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
+    connectionTimeout: SEND_TIMEOUT_MS,
+    greetingTimeout: SEND_TIMEOUT_MS,
+    socketTimeout: SEND_TIMEOUT_MS,
+  });
+  return smtp;
+}
+
 /**
- * Emails the owner about a new report. Never throws: a failed alert must not
- * fail the report itself (it is already stored in content_reports).
+ * Emails the owner about a new report, over SMTP (SMTP_USER / SMTP_PASS) or
+ * Resend (RESEND_API_KEY). Never throws: a failed alert must not fail the
+ * report itself (it is already stored in content_reports).
  */
 export async function sendReportAlert(alert: ReportAlert): Promise<void> {
   const email = buildReportAlertEmail(alert);
+  if (env.SMTP_USER && env.SMTP_PASS) {
+    try {
+      await smtpTransport().sendMail({
+        // Gmail only sends as the signed-in account (or its aliases).
+        from: `Fit Pixel Alerts <${env.SMTP_USER}>`,
+        to: env.ALERT_EMAIL_TO,
+        subject: email.subject,
+        text: email.text,
+        html: email.html,
+      });
+    } catch (err) {
+      console.error(`Report alert email failed (SMTP): ${err instanceof Error ? err.message : err} [${alert.reportId}]`);
+    }
+    return;
+  }
   if (!env.RESEND_API_KEY) {
-    console.warn(`Report alert not emailed (RESEND_API_KEY unset): ${email.subject} [${alert.reportId}]`);
+    console.warn(`Report alert not emailed (no SMTP_USER/SMTP_PASS or RESEND_API_KEY): ${email.subject} [${alert.reportId}]`);
     return;
   }
   try {
