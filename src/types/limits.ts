@@ -59,6 +59,8 @@ export const DAY_STARTS_AT_MINUTES_MAX = 1439;
 export const SAVED_MEAL_VENDOR_MAX = 80;
 
 export const XP_PER_HABIT_LOG = 10;
+/** Logs per type per day that earn XP_PER_HABIT_LOG (recompute_my_xp). */
+export const XP_HABIT_LOGS_PER_TYPE_PER_DAY = 3;
 export const XP_PER_GOAL_MET = 50;
 export const XP_DAY_COMPLETE = 100;
 export const XP_PER_LEVEL = 100;

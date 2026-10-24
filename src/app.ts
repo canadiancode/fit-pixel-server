@@ -14,6 +14,7 @@ import { gymSubmissionsRouter } from "./routes/gym-submissions";
 import { gymsRouter } from "./routes/gyms";
 import { habitsRouter } from "./routes/habits";
 import { healthRouter } from "./routes/health";
+import { leaderboardRouter } from "./routes/leaderboard";
 import { legalRouter } from "./routes/legal-html";
 import { meRouter } from "./routes/me";
 import { notificationsRouter } from "./routes/notifications";
@@ -73,6 +74,7 @@ export function createApp() {
   app.use("/v1/blocks", blocksRouter);
   app.use("/v1/reports", reportsRouter);
   app.use("/v1/friends", friendsRouter);
+  app.use("/v1/leaderboard", leaderboardRouter);
   app.use("/v1/notifications", notificationsRouter);
   app.use("/v1/push-tokens", pushTokensRouter);
 
