@@ -33,8 +33,17 @@ const envSchema = z.object({
     z.string().optional(),
   ),
   /**
-   * Resend API key for safety alerts (a report was filed). Alerts are only
-   * logged until it is set.
+   * SMTP login for safety alerts (a report was filed), e.g. the Google
+   * Workspace inbox: smtp.gmail.com:465, hello@fitpixel.app and a Google
+   * app password. Used when SMTP_USER and SMTP_PASS are set.
+   */
+  SMTP_HOST: z.string().trim().min(1).default("smtp.gmail.com"),
+  SMTP_PORT: z.coerce.number().int().positive().default(465),
+  SMTP_USER: z.preprocess(emptyToUndefined, z.string().optional()),
+  SMTP_PASS: z.preprocess(emptyToUndefined, z.string().optional()),
+  /**
+   * Alternative to SMTP: a Resend API key. Alerts are only logged when
+   * neither is set.
    */
   RESEND_API_KEY: z.preprocess(emptyToUndefined, z.string().optional()),
   /** Where report alerts go. */
