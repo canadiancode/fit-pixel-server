@@ -13,7 +13,7 @@ import { Router } from "express";
 /** The monitored Fit Pixel inbox (Google Workspace). */
 const LEGAL_CONTACT_EMAIL: string | null = "hello@fitpixel.app";
 
-const LEGAL_EFFECTIVE_DATE = "October 23, 2026";
+const LEGAL_EFFECTIVE_DATE = "October 24, 2026";
 
 function contactHtml(): string {
   return LEGAL_CONTACT_EMAIL
@@ -135,7 +135,7 @@ export function renderPrivacyPolicyHtml(): string {
 
       <h2>Who can see your information</h2>
       <ul>
-        <li><strong>Other Fit Pixel users</strong> can see your display name and Pixel look. Your bio and home gym are shown only if you turn on profile visibility. Messages are visible to the members of the chat they are sent in.</li>
+        <li><strong>Other Fit Pixel users</strong> can see your display name and Pixel look, and your level and XP on the leaderboards (your friends' board and the global board, which ranks everyone). Your bio and home gym are shown only if you turn on profile visibility. Messages are visible to the members of the chat they are sent in.</li>
         <li><strong>Service providers</strong> who process data for us: Supabase (database and sign-in), DigitalOcean (API hosting), Expo and Apple (push notifications and app updates), Sentry (crash reports) and FatSecret (food search — we send your search terms, not your identity).</li>
         <li><strong>Legal reasons:</strong> we may disclose information if required by law or to protect the safety of our users.</li>
       </ul>
