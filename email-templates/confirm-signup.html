@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="supported-color-schemes" content="dark">
+<title>Press start</title>
+<style>
+  @font-face { font-family: 'Press Start 2P'; src: url('https://api.aurashields.com/auth/assets/PressStart2P-Regular.ttf') format('truetype'); }
+  a { color: #22c8ff; }
+  @media (max-width: 560px) { .card { width: 100% !important; } .pad { padding: 28px 22px !important; } }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#011a35;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#011a35;">One tap and your Pixel is ready to level up.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#011a35;">
+  <tr>
+    <td align="center" style="padding:36px 12px;">
+      <table role="presentation" class="card" width="520" cellpadding="0" cellspacing="0" border="0" style="width:520px;max-width:520px;background:#02284f;border:4px solid #03418c;border-radius:14px;">
+        <tr>
+          <td class="pad" align="center" style="padding:40px 40px 34px;">
+            <img src="https://api.aurashields.com/auth/assets/app-icon.png" width="72" height="72" alt="Fit Pixel" style="display:block;border:0;border-radius:16px;margin:0 auto 18px;">
+            <div style="font-family:'Press Start 2P', 'PressStart2P', 'Courier New', Courier, monospace;font-size:18px;font-weight:bold;letter-spacing:1px;line-height:1.4;">
+              <span style="color:#ffffff;">FIT</span> <span style="color:#22c8ff;">PIXEL</span>
+            </div>
+            <div style="height:28px;line-height:28px;">&nbsp;</div>
+            <h1 style="margin:0 0 18px;font-family:'Press Start 2P', 'PressStart2P', 'Courier New', Courier, monospace;font-size:17px;font-weight:bold;line-height:1.6;color:#ffd21a;text-transform:uppercase;">Press start</h1>
+            <p style="margin:0 0 28px;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;font-size:16px;line-height:1.6;color:#d8e6ff;">Confirm your email to finish creating your Fit Pixel account. Then open the app and start earning XP.</p>
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+              <tr>
+                <td align="center" bgcolor="#7fe000" style="background:#7fe000;border:4px solid #000000;border-radius:4px;">
+                  <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:16px 28px;font-family:'Press Start 2P', 'PressStart2P', 'Courier New', Courier, monospace;font-size:14px;font-weight:bold;line-height:1.3;color:#000000;text-decoration:none;text-transform:uppercase;">Confirm email</a>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:28px 0 0;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;font-size:14px;line-height:1.6;color:#a9c1e6;">Didn't sign up for Fit Pixel? You can ignore this email and no account will be created.</p>
+            <p style="margin:22px 0 0;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;font-size:12px;line-height:1.6;color:#7f97bd;">Button not working? Paste this link into your browser:<br><a href="{{ .ConfirmationURL }}" style="color:#22c8ff;word-break:break-all;">{{ .ConfirmationURL }}</a></p>
+          </td>
+        </tr>
+      </table>
+      <p style="margin:22px 0 0;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;font-size:12px;line-height:1.6;color:#7f97bd;">
+        Fit Pixel · <a href="mailto:hello@fitpixel.app" style="color:#7f97bd;">hello@fitpixel.app</a> · <a href="https://fitpixel.app" style="color:#7f97bd;">fitpixel.app</a>
+      </p>
+    </td>
+  </tr>
+</table>
+</body>
+</html>
