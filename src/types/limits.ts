@@ -64,6 +64,30 @@ export const XP_HABIT_LOGS_PER_TYPE_PER_DAY = 3;
 export const XP_PER_GOAL_MET = 50;
 export const XP_DAY_COMPLETE = 100;
 export const XP_PER_LEVEL = 100;
+/** Each completed set in a synced workout, up to XP_WORKOUT_SETS_PER_DAY a day. */
+export const XP_PER_WORKOUT_SET = 5;
+export const XP_WORKOUT_SETS_PER_DAY = 40;
+/** A synced workout with at least one completed set, up to XP_WORKOUT_COMPLETES_PER_DAY a day. */
+export const XP_WORKOUT_COMPLETE = 25;
+export const XP_WORKOUT_COMPLETES_PER_DAY = 2;
+
+/** Workout session + training plan bounds (workout_session / training_plan ops). */
+export const TRAINING_LIMITS = {
+  idMax: 64,
+  nameMax: 80,
+  exercisesMax: 30,
+  setsMax: 20,
+  weightMax: 2_000,
+  /** Reps, or seconds for timed moves. */
+  repsMax: 3_600,
+  restSecMax: 900,
+  /** A session can run at most this long (started → finished). */
+  sessionHoursMax: 24,
+  planWorkoutsMax: 14,
+  planJsonMaxBytes: 65_536,
+  sessionPageDefault: 200,
+  sessionPageMax: 500,
+} as const;
 
 export const APP_THEME_IDS = ["blue", "coral", "emerald", "violet"] as const;
 export type AppThemeId = (typeof APP_THEME_IDS)[number];

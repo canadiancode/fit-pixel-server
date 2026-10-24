@@ -16,7 +16,10 @@ import {
   type RestoreProfile,
   type RestoreSavedMeal,
   type RestoreSnapshot,
+  type RestoreTrainingPlan,
+  type RestoreWorkoutSession,
   type RestoreXp,
+  type WorkoutsPage,
 } from "../types/restore";
 
 type HabitLogRow = {
@@ -96,59 +99,140 @@ export async function listHabitLogsPage(
   };
 }
 
+type WorkoutSessionRow = {
+  id: string;
+  workout_id: string;
+  workout_name: string;
+  unit: "lb" | "kg";
+  started_at: string;
+  finished_at: string;
+  day_key: string;
+  sets_done: number;
+  exercises: unknown;
+};
+
+/** Keyset page over the caller's finished workouts, ordered by id. */
+export async function listWorkoutSessionsPage(
+  supabase: SupabaseClient,
+  userId: string,
+  options: { after?: string; limit: number },
+): Promise<WorkoutsPage> {
+  let query = supabase
+    .from("workout_sessions")
+    .select(
+      "id,workout_id,workout_name,unit,started_at,finished_at,day_key,sets_done,exercises",
+    )
+    .eq("user_id", userId)
+    .order("id", { ascending: true })
+    .limit(options.limit);
+  if (options.after) {
+    query = query.gt("id", options.after);
+  }
+
+  const { data, error } = await query;
+  throwIfError(error);
+
+  const sessions: RestoreWorkoutSession[] = (
+    (data ?? []) as WorkoutSessionRow[]
+  ).map((row) => ({
+    id: row.id,
+    workoutId: row.workout_id,
+    workoutName: row.workout_name,
+    unit: row.unit,
+    startedAt: row.started_at,
+    finishedAt: row.finished_at,
+    dayKey: row.day_key,
+    setsDone: row.sets_done,
+    exercises: Array.isArray(row.exercises) ? row.exercises : [],
+  }));
+  const last = sessions[sessions.length - 1];
+  return {
+    sessions,
+    nextCursor: sessions.length === options.limit && last ? last.id : null,
+  };
+}
+
 export async function getRestoreSnapshot(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<RestoreSnapshot> {
-  const [profile, prefs, goals, xp, loadout, meals, logCount] =
-    await Promise.all([
-      supabase
-        .from("profiles")
-        .select(
-          "display_name,bio,home_gym_id,home_gym_name,profile_visible,instagram,tiktok,youtube,updated_at",
-        )
-        .eq("user_id", userId)
-        .maybeSingle(),
-      supabase
-        .from("prefs")
-        .select(
-          "unit_system,selected_theme_id,notif_accountability,notif_news,day_starts_at_minutes,time_zone,updated_at",
-        )
-        .eq("user_id", userId)
-        .maybeSingle(),
-      supabase
-        .from("daily_goals")
-        .select(
-          "food_kcal,water_amount,water_unit,train_minutes,sleep_hours,steps,active_kcal,weight_goal,weight_unit,updated_at",
-        )
-        .eq("user_id", userId)
-        .maybeSingle(),
-      supabase
-        .from("xp_state")
-        .select("lifetime_xp,level,updated_at")
-        .eq("user_id", userId)
-        .maybeSingle(),
-      supabase
-        .from("loadouts")
-        .select("equipped,updated_at")
-        .eq("user_id", userId)
-        .maybeSingle(),
-      supabase
-        .from("saved_meals")
-        .select(
-          "id,name,vendor,portion_size,kcal,protein_g,carbs_g,fat_g,meal_type,created_at,updated_at",
-        )
-        .eq("user_id", userId)
-        .eq("deleted", false)
-        .order("updated_at", { ascending: false })
-        .limit(RESTORE_LIMITS.savedMealsMax),
-      supabase
-        .from("habit_logs")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", userId),
-    ]);
+  const [
+    profile,
+    prefs,
+    goals,
+    xp,
+    loadout,
+    meals,
+    logCount,
+    plan,
+    workoutCount,
+  ] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select(
+        "display_name,bio,home_gym_id,home_gym_name,profile_visible,instagram,tiktok,youtube,updated_at",
+      )
+      .eq("user_id", userId)
+      .maybeSingle(),
+    supabase
+      .from("prefs")
+      .select(
+        "unit_system,selected_theme_id,notif_accountability,notif_news,day_starts_at_minutes,time_zone,updated_at",
+      )
+      .eq("user_id", userId)
+      .maybeSingle(),
+    supabase
+      .from("daily_goals")
+      .select(
+        "food_kcal,water_amount,water_unit,train_minutes,sleep_hours,steps,active_kcal,weight_goal,weight_unit,updated_at",
+      )
+      .eq("user_id", userId)
+      .maybeSingle(),
+    supabase
+      .from("xp_state")
+      .select("lifetime_xp,level,updated_at")
+      .eq("user_id", userId)
+      .maybeSingle(),
+    supabase
+      .from("loadouts")
+      .select("equipped,updated_at")
+      .eq("user_id", userId)
+      .maybeSingle(),
+    supabase
+      .from("saved_meals")
+      .select(
+        "id,name,vendor,portion_size,kcal,protein_g,carbs_g,fat_g,meal_type,created_at,updated_at",
+      )
+      .eq("user_id", userId)
+      .eq("deleted", false)
+      .order("updated_at", { ascending: false })
+      .limit(RESTORE_LIMITS.savedMealsMax),
+    supabase
+      .from("habit_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId),
+    supabase
+      .from("training_plans")
+      .select("plan,updated_at")
+      .eq("user_id", userId)
+      .maybeSingle(),
+    supabase
+      .from("workout_sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId),
+  ]);
 
-  for (const result of [profile, prefs, goals, xp, loadout, meals, logCount]) {
+  for (const result of [
+    profile,
+    prefs,
+    goals,
+    xp,
+    loadout,
+    meals,
+    logCount,
+    plan,
+    workoutCount,
+  ]) {
     throwIfError(result.error);
   }
 
@@ -220,6 +304,12 @@ export async function getRestoreSnapshot(
     updatedAt: m.updated_at,
   }));
 
+  const tp = plan.data;
+  const trainingPlan: RestoreTrainingPlan | null =
+    tp && tp.plan != null && typeof tp.plan === "object" && !Array.isArray(tp.plan)
+      ? { plan: tp.plan as Record<string, unknown>, updatedAt: tp.updated_at }
+      : null;
+
   return {
     serverTime: new Date().toISOString(),
     profile: restoreProfile,
@@ -229,5 +319,7 @@ export async function getRestoreSnapshot(
     loadout: restoreLoadout,
     savedMeals,
     habitLogCount: logCount.count ?? 0,
+    trainingPlan,
+    workoutSessionCount: workoutCount.count ?? 0,
   };
 }

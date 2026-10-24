@@ -58,7 +58,8 @@ curl http://localhost:3001/ready
 | `POST` | `/v1/sync` | JWT | Ingest outbox ops; `{ acks, serverTime }` |
 | `GET` | `/v1/me` | JWT | `{ id, email }` from verified claims |
 | `GET` | `/v1/habits?after=&limit=` | JWT | Page habit logs by id (default 500, max 1000); `{ logs, nextCursor }` |
-| `GET` | `/v1/me/snapshot` | JWT | Restore snapshot: profile, prefs, goals, XP, loadout, saved meals, `habitLogCount` |
+| `GET` | `/v1/workouts?after=&limit=` | JWT | Page finished workouts by id (default 200, max 500); `{ sessions, nextCursor }` |
+| `GET` | `/v1/me/snapshot` | JWT | Restore snapshot: profile, prefs, goals, XP, loadout, saved meals, training plan, `habitLogCount`, `workoutSessionCount` |
 | `GET` | `/v1/food/search?q=` | JWT | Live if FatSecret env set; else stub |
 | `GET` | `/v1/food/:id` | JWT | Live if FatSecret env set; else stub |
 | `GET` | `/v1/gyms` | JWT | Gym catalog + member counts + joined |
@@ -247,9 +248,10 @@ Response:
 
 ### Trust rules
 
-- **FACTS** (persist after sanitization): `habit_log`, `daily_goals`, `loadout`, `profile`, `prefs`, `saved_meal`
+- **FACTS** (persist after sanitization): `habit_log`, `daily_goals`, `loadout`, `profile`, `prefs`, `saved_meal`, `workout_session`, `training_plan`
 - **UNTRUSTED** (ack `synced` with `ignored_untrusted`; do not persist as score/ownership): `xp_award`, `inventory_unlock`
-- Recompute XP / level into `xp_state` from `habit_log` + `daily_goals`
+- Recompute XP / level into `xp_state` from `habit_log` + `daily_goals` + `workout_session` (completed sets, capped per day; see `recompute_my_xp()` in the newest migration that defines it)
+- `training_plan` is last-write-wins on its `updatedAt`; it never affects XP
 - Do not trust client `dayKey` — re-derive from timestamp + stored timezone / day-start
 - Ignore client `source` for scoring; never store raw HealthKit sample blobs
 - `profileVisible` is a server publish gate (default hidden)

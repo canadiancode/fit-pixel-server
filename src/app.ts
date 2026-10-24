@@ -23,6 +23,7 @@ import { pushTokensRouter } from "./routes/push-tokens";
 import { reportsRouter } from "./routes/reports";
 import { syncRouter } from "./routes/sync";
 import { wellKnownRouter } from "./routes/well-known";
+import { workoutsRouter } from "./routes/workouts";
 
 const AUTH_ASSETS_DIR = path.join(__dirname, "..", "public", "auth");
 
@@ -66,6 +67,7 @@ export function createApp() {
   app.use("/v1/sync", syncRouter);
   app.use("/v1/me", meRouter);
   app.use("/v1/habits", habitsRouter);
+  app.use("/v1/workouts", workoutsRouter);
   app.use("/v1/food", foodRouter);
   app.use("/v1/gyms", gymsRouter);
   app.use("/v1/gym-submissions", gymSubmissionsRouter);

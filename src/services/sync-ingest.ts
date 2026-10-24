@@ -279,6 +279,42 @@ async function applyLoadout(
   throwIfError(error);
 }
 
+/** workout_sessions is read-only to clients; the RPC validates and scores it. */
+async function applyWorkoutSession(
+  supabase: SupabaseClient,
+  op: Extract<PendingServerOp, { type: "workout_session" }>,
+): Promise<void> {
+  const p = op.payload;
+  const { error } = await supabase.rpc("upsert_my_workout_session", {
+    session_id: p.id,
+    session_workout_id: p.workoutId,
+    session_workout_name: p.workoutName,
+    session_unit: p.unit,
+    session_started_at: p.startedAt,
+    session_finished_at: p.finishedAt,
+    session_exercises: p.exercises,
+  });
+  if (error?.code === "22023") {
+    throw new AppError(400, "VALIDATION_ERROR", error.message);
+  }
+  throwIfError(error);
+}
+
+/** Last write wins on updatedAt, so a late older edit is a no-op. */
+async function applyTrainingPlan(
+  supabase: SupabaseClient,
+  op: Extract<PendingServerOp, { type: "training_plan" }>,
+): Promise<void> {
+  const { error } = await supabase.rpc("save_my_training_plan", {
+    plan: op.payload.plan,
+    plan_updated_at: op.payload.updatedAt,
+  });
+  if (error?.code === "22023") {
+    throw new AppError(400, "VALIDATION_ERROR", error.message);
+  }
+  throwIfError(error);
+}
+
 async function recordAck(
   supabase: SupabaseClient,
   userId: string,
@@ -345,6 +381,12 @@ async function ingestOne(
       case "loadout":
         await applyLoadout(supabase, userId, op);
         break;
+      case "workout_session":
+        await applyWorkoutSession(supabase, op);
+        break;
+      case "training_plan":
+        await applyTrainingPlan(supabase, op);
+        break;
       default: {
         const ack: SyncAck = {
           id: op.id,
@@ -373,7 +415,10 @@ async function ingestOne(
   return {
     ack,
     recomputeXp:
-      op.type === "habit_log" || op.type === "daily_goals" || boundaryChanged,
+      op.type === "habit_log" ||
+      op.type === "daily_goals" ||
+      op.type === "workout_session" ||
+      boundaryChanged,
   };
 }
 

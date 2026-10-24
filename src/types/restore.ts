@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { FoodMealType, HabitLogSyncPayload } from "./habits";
+import { TRAINING_LIMITS } from "./limits";
 
 /**
  * Restore contract (server → app). Mirrors the POST /v1/sync fact payloads so
@@ -22,6 +23,42 @@ export const habitsPageQuerySchema = z.object({
     .optional()
     .default(RESTORE_LIMITS.habitPageDefault),
 });
+
+export const workoutsPageQuerySchema = z.object({
+  after: z.string().uuid().optional(),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(TRAINING_LIMITS.sessionPageMax)
+    .optional()
+    .default(TRAINING_LIMITS.sessionPageDefault),
+});
+
+/** A finished workout as synced (workout_session op), with the server's day key. */
+export type RestoreWorkoutSession = {
+  id: string;
+  workoutId: string;
+  workoutName: string;
+  unit: "lb" | "kg";
+  startedAt: string;
+  finishedAt: string;
+  dayKey: string;
+  setsDone: number;
+  exercises: unknown[];
+};
+
+export type WorkoutsPage = {
+  sessions: RestoreWorkoutSession[];
+  /** Pass as `after` for the next page; null when this was the last page. */
+  nextCursor: string | null;
+};
+
+export type RestoreTrainingPlan = {
+  /** The plan document exactly as the app synced it. */
+  plan: Record<string, unknown>;
+  updatedAt: string;
+};
 
 export type HabitsPage = {
   logs: HabitLogSyncPayload[];
@@ -101,4 +138,7 @@ export type RestoreSnapshot = {
   savedMeals: RestoreSavedMeal[];
   /** Total server habit logs; fetch them with GET /v1/habits. */
   habitLogCount: number;
+  trainingPlan: RestoreTrainingPlan | null;
+  /** Total finished workouts; fetch them with GET /v1/workouts. */
+  workoutSessionCount: number;
 };

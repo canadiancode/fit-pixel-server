@@ -13,6 +13,7 @@ import {
   PIXEL_LAYER_IDS,
   PROFILE_LIMITS,
   SAVED_MEAL_VENDOR_MAX,
+  TRAINING_LIMITS,
 } from "./limits";
 
 /**
@@ -36,6 +37,8 @@ export const PENDING_SERVER_OP_TYPES = [
   "profile",
   "prefs",
   "saved_meal",
+  "workout_session",
+  "training_plan",
 ] as const;
 
 export type PendingServerOpType = (typeof PENDING_SERVER_OP_TYPES)[number];
@@ -50,6 +53,8 @@ export const FACT_PENDING_OP_TYPES = [
   "profile",
   "prefs",
   "saved_meal",
+  "workout_session",
+  "training_plan",
 ] as const satisfies readonly PendingServerOpType[];
 
 export const UNTRUSTED_PENDING_OP_TYPES = [
@@ -422,6 +427,84 @@ export const savedMealPayloadSchema = z.union([
   savedMealUpsertSchema,
 ]);
 
+const trainingIdSchema = z.string().trim().min(1).max(TRAINING_LIMITS.idMax);
+const trainingNameSchema = z.string().trim().min(1).max(TRAINING_LIMITS.nameMax);
+const wholeNumber = (max: number) => z.number().int().min(0).max(max);
+
+const workoutSetSchema = z.object({
+  weight: z.number().finite().min(0).max(TRAINING_LIMITS.weightMax),
+  reps: wholeNumber(TRAINING_LIMITS.repsMax),
+  done: z.boolean(),
+  completedAt: isoDatetime.nullable(),
+});
+
+const workoutExerciseSchema = z.object({
+  key: trainingIdSchema,
+  exerciseId: trainingIdSchema,
+  repsMin: wholeNumber(TRAINING_LIMITS.repsMax),
+  repsMax: wholeNumber(TRAINING_LIMITS.repsMax),
+  restSec: wholeNumber(TRAINING_LIMITS.restSecMax),
+  sets: z.array(workoutSetSchema).max(TRAINING_LIMITS.setsMax),
+});
+
+/**
+ * A finished workout. upsert_my_workout_session re-validates it, derives the
+ * day key from startedAt and counts completed sets, so the client's dayKey and
+ * xpEarned are not sent.
+ */
+export const workoutSessionPayloadSchema = z
+  .object({
+    id: z.string().uuid(),
+    workoutId: trainingIdSchema,
+    workoutName: trainingNameSchema,
+    unit: z.enum(["lb", "kg"]),
+    startedAt: isoDatetime,
+    finishedAt: isoDatetime,
+    exercises: z.array(workoutExerciseSchema).max(TRAINING_LIMITS.exercisesMax),
+  })
+  .refine((s) => {
+    const ms = Date.parse(s.finishedAt) - Date.parse(s.startedAt);
+    return ms >= 0 && ms <= TRAINING_LIMITS.sessionHoursMax * 3_600_000;
+  }, `a workout runs 0–${TRAINING_LIMITS.sessionHoursMax} hours`);
+
+const planExerciseSchema = z.object({
+  key: trainingIdSchema,
+  exerciseId: trainingIdSchema,
+  sets: z.number().int().min(1).max(TRAINING_LIMITS.setsMax),
+  repsMin: wholeNumber(TRAINING_LIMITS.repsMax),
+  repsMax: wholeNumber(TRAINING_LIMITS.repsMax),
+  restSec: wholeNumber(TRAINING_LIMITS.restSecMax),
+});
+
+const planWorkoutSchema = z.object({
+  id: trainingIdSchema,
+  name: trainingNameSchema,
+  focus: z.string().trim().max(TRAINING_LIMITS.nameMax),
+  weekdays: z.array(z.number().int().min(0).max(6)).max(7),
+  exercises: z.array(planExerciseSchema).max(TRAINING_LIMITS.exercisesMax),
+});
+
+/** The whole plan document (last write wins on updatedAt). */
+export const trainingPlanPayloadSchema = z.object({
+  plan: z
+    .object({
+      v: z.literal(1),
+      programId: trainingIdSchema,
+      name: trainingNameSchema,
+      answers: z.record(z.string(), z.unknown()).nullable(),
+      className: z.string().trim().max(TRAINING_LIMITS.nameMax).nullable(),
+      weeks: z.number().int().min(1).max(52).nullable(),
+      workouts: z.array(planWorkoutSchema).max(TRAINING_LIMITS.planWorkoutsMax),
+      createdAt: isoDatetime,
+      updatedAt: isoDatetime,
+    })
+    .refine(
+      (plan) => JSON.stringify(plan).length <= TRAINING_LIMITS.planJsonMaxBytes,
+      "plan is too large",
+    ),
+  updatedAt: isoDatetime,
+});
+
 const untrustedPayloadSchema = z.record(z.string(), z.unknown());
 
 const opEnvelope = {
@@ -461,6 +544,16 @@ export const pendingServerOpSchema = z.discriminatedUnion("type", [
     ...opEnvelope,
     type: z.literal("loadout"),
     payload: loadoutPayloadSchema,
+  }),
+  z.object({
+    ...opEnvelope,
+    type: z.literal("workout_session"),
+    payload: workoutSessionPayloadSchema,
+  }),
+  z.object({
+    ...opEnvelope,
+    type: z.literal("training_plan"),
+    payload: trainingPlanPayloadSchema,
   }),
   z.object({
     ...opEnvelope,
