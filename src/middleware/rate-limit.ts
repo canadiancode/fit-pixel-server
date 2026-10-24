@@ -58,3 +58,9 @@ export const pixelSearchRateLimit = userRateLimit(30);
 export const safetyWriteRateLimit = userRateLimit(20);
 /** Gym suggestions: a few in a sitting, never dozens. */
 export const gymSubmissionRateLimit = userRateLimit(10, 60 * 60_000);
+/** Waitlist sign-ups from the website: a person needs one, a bot wants thousands. */
+export const waitlistRateLimit = limiter({
+  windowMs: 60 * 60_000,
+  limit: 10,
+  keyGenerator: ipKey,
+});

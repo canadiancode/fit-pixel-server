@@ -46,3 +46,29 @@ export function createUserSupabaseClient(accessToken: string): SupabaseClient {
     },
   });
 }
+
+/**
+ * PostgREST client with only the anon key, for public endpoints (the
+ * waitlist). It can do no more than the anon role's grants allow.
+ */
+export function createAnonSupabaseClient(): SupabaseClient {
+  const url = getSupabaseUrl();
+  if (!url || !env.SUPABASE_ANON_KEY || !isSupabaseUserClientConfigured()) {
+    throw new AppError(
+      503,
+      "SERVICE_UNAVAILABLE",
+      "Supabase is not configured",
+    );
+  }
+
+  return createClient(url, env.SUPABASE_ANON_KEY, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+    realtime: {
+      transport: UnusedRealtimeTransport as unknown as typeof WebSocket,
+    },
+  });
+}
