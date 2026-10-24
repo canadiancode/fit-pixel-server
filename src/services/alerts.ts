@@ -107,30 +107,32 @@ function smtpTransport(): Transporter {
   return smtp;
 }
 
+type OwnerEmail = { subject: string; text: string; html: string };
+
 /**
- * Emails the owner about a new report, over SMTP (SMTP_USER / SMTP_PASS) or
- * Resend (RESEND_API_KEY). Never throws: a failed alert must not fail the
- * report itself (it is already stored in content_reports).
+ * Emails the owner (ALERT_EMAIL_TO) over SMTP (SMTP_USER / SMTP_PASS) or
+ * Resend (RESEND_API_KEY). Never throws: a failed email must not fail the
+ * request that triggered it (the record is already stored). `tag` goes in
+ * the log lines.
  */
-export async function sendReportAlert(alert: ReportAlert): Promise<void> {
-  const email = buildReportAlertEmail(alert);
+async function sendOwnerEmail(email: OwnerEmail, sender: string, tag: string): Promise<void> {
   if (env.SMTP_USER && env.SMTP_PASS) {
     try {
       await smtpTransport().sendMail({
         // Gmail only sends as the signed-in account (or its aliases).
-        from: `Fit Pixel Alerts <${env.SMTP_USER}>`,
+        from: `${sender} <${env.SMTP_USER}>`,
         to: env.ALERT_EMAIL_TO,
         subject: email.subject,
         text: email.text,
         html: email.html,
       });
     } catch (err) {
-      console.error(`Report alert email failed (SMTP): ${err instanceof Error ? err.message : err} [${alert.reportId}]`);
+      console.error(`Owner email failed (SMTP): ${err instanceof Error ? err.message : err} [${tag}]`);
     }
     return;
   }
   if (!env.RESEND_API_KEY) {
-    console.warn(`Report alert not emailed (no SMTP_USER/SMTP_PASS or RESEND_API_KEY): ${email.subject} [${alert.reportId}]`);
+    console.warn(`Owner email not sent (no SMTP_USER/SMTP_PASS or RESEND_API_KEY): ${email.subject} [${tag}]`);
     return;
   }
   try {
@@ -150,9 +152,59 @@ export async function sendReportAlert(alert: ReportAlert): Promise<void> {
       signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
     });
     if (!response.ok) {
-      console.error(`Report alert email failed: HTTP ${response.status} [${alert.reportId}]`);
+      console.error(`Owner email failed: HTTP ${response.status} [${tag}]`);
     }
   } catch (err) {
-    console.error(`Report alert email failed: ${err instanceof Error ? err.message : err} [${alert.reportId}]`);
+    console.error(`Owner email failed: ${err instanceof Error ? err.message : err} [${tag}]`);
   }
+}
+
+/** Emails the owner about a new report. */
+export async function sendReportAlert(alert: ReportAlert): Promise<void> {
+  await sendOwnerEmail(buildReportAlertEmail(alert), "Fit Pixel Alerts", alert.reportId);
+}
+
+export type WaitlistSignup = {
+  email: string;
+  platform: "ios" | "android";
+  source: string | null;
+  joinedAt: string;
+};
+
+const PLATFORM_LABELS: Record<WaitlistSignup["platform"], string> = { ios: "iPhone", android: "Android" };
+
+export function buildWaitlistSignupEmail(signup: WaitlistSignup): OwnerEmail {
+  const device = PLATFORM_LABELS[signup.platform];
+  const subject = `[Fit Pixel] Waitlist: ${signup.email} (${device})`;
+  const rows: [string, string][] = [
+    ["Email", signup.email],
+    ["Device", device],
+    ["Came from", signup.source || "direct"],
+    ["Joined at", signup.joinedAt],
+  ];
+  const text = [
+    "Someone joined the Fit Pixel waitlist on fitpixel.app.",
+    "",
+    ...rows.map(([k, v]) => `${k}: ${v}`),
+    "",
+    "Everyone on the list: select * from public.waitlist order by created_at desc; (Supabase → SQL Editor)",
+  ].join("\n");
+  const html = `<div style="font-family:-apple-system,Helvetica,Arial,sans-serif;max-width:640px">
+<h2 style="margin:0 0 12px">New waitlist signup</h2>
+<table cellpadding="6" style="border-collapse:collapse;width:100%">
+${rows
+  .map(
+    ([k, v]) =>
+      `<tr><td style="border-bottom:1px solid #eee;color:#666;white-space:nowrap;vertical-align:top">${escapeHtml(k)}</td><td style="border-bottom:1px solid #eee">${escapeHtml(v)}</td></tr>`,
+  )
+  .join("\n")}
+</table>
+<p style="color:#888;font-size:12px;margin-top:20px">Everyone on the list: <code>select * from public.waitlist order by created_at desc;</code> in Supabase → SQL Editor.</p>
+</div>`;
+  return { subject, text, html };
+}
+
+/** Emails the owner when a new address joins the waitlist (not on repeats). */
+export async function sendWaitlistSignupEmail(signup: WaitlistSignup): Promise<void> {
+  await sendOwnerEmail(buildWaitlistSignupEmail(signup), "Fit Pixel Waitlist", signup.email);
 }

@@ -23,16 +23,19 @@ alter table public.waitlist enable row level security;
 alter table public.waitlist force row level security;
 revoke all on public.waitlist from anon, authenticated;
 
--- Signing up twice just updates the platform; it never reveals whether an
--- address was already on the list.
-create or replace function public.join_waitlist(p_email text, p_platform text, p_source text default null)
-returns void
+-- Signing up twice just updates the platform. Returns true only for a new
+-- address, so the API emails the owner once per person; the website never
+-- learns whether an address was already on the list.
+drop function if exists public.join_waitlist(text, text, text);
+create function public.join_waitlist(p_email text, p_platform text, p_source text default null)
+returns boolean
 language plpgsql
 security definer
 set search_path = public, pg_temp
 as $$
 declare
   clean_email text := lower(btrim(p_email));
+  inserted boolean;
 begin
   if clean_email !~ '^[^\s@]+@[^\s@]+\.[^\s@]+$' or char_length(clean_email) > 254 then
     raise exception 'Invalid email' using errcode = '22023';
@@ -43,7 +46,9 @@ begin
 
   insert into public.waitlist (email, platform, source)
   values (clean_email, p_platform, nullif(left(btrim(coalesce(p_source, '')), 200), ''))
-  on conflict (email) do update set platform = excluded.platform;
+  on conflict (email) do update set platform = excluded.platform
+  returning (xmax = 0) into inserted;
+  return inserted;
 end;
 $$;
 

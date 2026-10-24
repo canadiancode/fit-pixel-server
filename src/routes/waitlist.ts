@@ -1,6 +1,7 @@
 import cors from "cors";
 import express, { Router } from "express";
 import { createAnonSupabaseClient } from "../config/supabase";
+import { sendWaitlistSignupEmail } from "../services/alerts";
 import { waitlistRateLimit } from "../middleware/rate-limit";
 import { validate } from "../middleware/validate";
 import { AppError } from "../types/api";
@@ -19,7 +20,7 @@ waitlistRouter.use(express.json({ limit: "4kb" }));
 waitlistRouter.post("/", waitlistRateLimit, validate(joinWaitlistBodySchema), async (req, res, next) => {
   try {
     const { email, platform, source } = req.body;
-    const { error } = await createAnonSupabaseClient().rpc("join_waitlist", {
+    const { data: isNew, error } = await createAnonSupabaseClient().rpc("join_waitlist", {
       p_email: email,
       p_platform: platform,
       p_source: source ?? null,
@@ -32,6 +33,10 @@ waitlistRouter.post("/", waitlistRateLimit, validate(joinWaitlistBodySchema), as
       throw new AppError(503, "SERVICE_UNAVAILABLE", "Could not join the waitlist");
     }
     res.status(201).json({ ok: true });
+    // Email the owner once per new address; repeats only update the platform.
+    if (isNew === true) {
+      void sendWaitlistSignupEmail({ email, platform, source: source ?? null, joinedAt: new Date().toISOString() });
+    }
   } catch (err) {
     next(err);
   }
