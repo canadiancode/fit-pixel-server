@@ -17,7 +17,13 @@ dotenv.config({
 
 const KEYS = ["SUPABASE_URL", "SUPABASE_ANON_KEY"];
 
-const optionalKeys = ["DATABASE_URL", "PUSH_DATABASE_URL"];
+const optionalKeys = [
+  "DATABASE_URL",
+  "PUSH_DATABASE_URL",
+  "RESEND_API_KEY",
+  "ALERT_EMAIL_TO",
+  "ALERT_EMAIL_FROM",
+];
 
 /** Deleted from the droplet's .env if present. */
 const REMOVED_KEYS = ["SUPABASE_SERVICE_ROLE_KEY"];

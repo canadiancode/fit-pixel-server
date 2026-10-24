@@ -6,6 +6,7 @@ export type ApiErrorCode =
   | "NOT_FOUND"
   | "FORBIDDEN"
   | "RATE_LIMITED"
+  | "CONTENT_BLOCKED"
   | "UPSTREAM_ERROR"
   | "INTERNAL_ERROR"
   | "SERVICE_UNAVAILABLE";
