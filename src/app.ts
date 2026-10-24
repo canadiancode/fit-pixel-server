@@ -50,6 +50,13 @@ export function createApp() {
     express.static(AUTH_ASSETS_DIR, {
       index: false,
       maxAge: "7d",
+      // Public brand files that the auth emails load from other origins
+      // (mail clients, webmail). Helmet's default same-origin CORP would
+      // block them there; the font also needs CORS for @font-face.
+      setHeaders(res) {
+        res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+        res.setHeader("Access-Control-Allow-Origin", "*");
+      },
     }),
   );
   app.use(wellKnownRouter);
