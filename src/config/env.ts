@@ -42,8 +42,8 @@ const envSchema = z.object({
   SMTP_USER: z.preprocess(emptyToUndefined, z.string().optional()),
   SMTP_PASS: z.preprocess(emptyToUndefined, z.string().optional()),
   /**
-   * Alternative to SMTP: a Resend API key. Alerts are only logged when
-   * neither is set.
+   * Resend API key; used before SMTP (DigitalOcean blocks SMTP ports on
+   * droplets). Alerts are only logged when neither is set.
    */
   RESEND_API_KEY: z.preprocess(emptyToUndefined, z.string().optional()),
   /** Where report alerts go. */
