@@ -109,13 +109,46 @@ function smtpTransport(): Transporter {
 
 type OwnerEmail = { subject: string; text: string; html: string };
 
+/** ALERT_EMAIL_FROM's address with this email's sender name, e.g. "Fit Pixel Waitlist <alerts@fitpixel.app>". */
+function resendFrom(sender: string): string {
+  const address = env.ALERT_EMAIL_FROM.match(/<([^>]+)>/)?.[1] ?? env.ALERT_EMAIL_FROM;
+  return `${sender} <${address}>`;
+}
+
 /**
- * Emails the owner (ALERT_EMAIL_TO) over SMTP (SMTP_USER / SMTP_PASS) or
- * Resend (RESEND_API_KEY). Never throws: a failed email must not fail the
- * request that triggered it (the record is already stored). `tag` goes in
- * the log lines.
+ * Emails the owner (ALERT_EMAIL_TO) through Resend (RESEND_API_KEY) or, if
+ * that isn't set, SMTP (SMTP_USER / SMTP_PASS). Resend goes first because it
+ * is plain HTTPS: DigitalOcean blocks outbound SMTP ports on droplets. Never
+ * throws: a failed email must not fail the request that triggered it (the
+ * record is already stored). `tag` goes in the log lines.
  */
 async function sendOwnerEmail(email: OwnerEmail, sender: string, tag: string): Promise<void> {
+  if (env.RESEND_API_KEY) {
+    try {
+      const response = await fetch(RESEND_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${env.RESEND_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: resendFrom(sender),
+          to: [env.ALERT_EMAIL_TO],
+          subject: email.subject,
+          text: email.text,
+          html: email.html,
+        }),
+        signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+      });
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        console.error(`Owner email failed (Resend): HTTP ${response.status} ${detail.slice(0, 200)} [${tag}]`);
+      }
+    } catch (err) {
+      console.error(`Owner email failed (Resend): ${err instanceof Error ? err.message : err} [${tag}]`);
+    }
+    return;
+  }
   if (env.SMTP_USER && env.SMTP_PASS) {
     try {
       await smtpTransport().sendMail({
@@ -131,32 +164,7 @@ async function sendOwnerEmail(email: OwnerEmail, sender: string, tag: string): P
     }
     return;
   }
-  if (!env.RESEND_API_KEY) {
-    console.warn(`Owner email not sent (no SMTP_USER/SMTP_PASS or RESEND_API_KEY): ${email.subject} [${tag}]`);
-    return;
-  }
-  try {
-    const response = await fetch(RESEND_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.RESEND_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: env.ALERT_EMAIL_FROM,
-        to: [env.ALERT_EMAIL_TO],
-        subject: email.subject,
-        text: email.text,
-        html: email.html,
-      }),
-      signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
-    });
-    if (!response.ok) {
-      console.error(`Owner email failed: HTTP ${response.status} [${tag}]`);
-    }
-  } catch (err) {
-    console.error(`Owner email failed: ${err instanceof Error ? err.message : err} [${tag}]`);
-  }
+  console.warn(`Owner email not sent (no RESEND_API_KEY or SMTP_USER/SMTP_PASS): ${email.subject} [${tag}]`);
 }
 
 /** Emails the owner about a new report. */
