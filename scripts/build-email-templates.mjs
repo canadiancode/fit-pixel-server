@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = join(ROOT, "email-templates");
-const ASSETS = "https://api.aurashields.com/auth/assets";
+const ASSETS = "https://api.fitpixel.app/auth/assets";
 const CONTACT = "hello@fitpixel.app";
 
 const PIXEL = "'Press Start 2P', 'PressStart2P', 'Courier New', Courier, monospace";

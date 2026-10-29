@@ -41,7 +41,7 @@ curl http://localhost:3001/ready
 | `npm run db:push-role` | Set a fresh password on the push worker's `fit_pixel_push` role and write `PUSH_DATABASE_URL` to `.env` |
 | `npm run db:dashboard-role` | Set a fresh password on the read-only `fit_pixel_dashboard` role and write `DASHBOARD_DATABASE_URL` to `../fit-pixel-dashboard/.env.local` |
 | `npm run db:gym-reviewer-role` | Set a fresh password on `fit_pixel_gym_reviewer` (can only approve / reject gym submissions) and write `GYM_REVIEWER_DATABASE_URL` to `../fit-pixel-dashboard/.env.local` |
-| `npm run smoke:pilot` | Signup → sync a water log → food search → gym chat against `https://api.aurashields.com` (deletes the throwaway user) |
+| `npm run smoke:pilot` | Signup → sync a water log → food search → gym chat against `https://api.fitpixel.app` (deletes the throwaway user) |
 
 ## Endpoints
 
@@ -205,8 +205,8 @@ FatSecret (optional for food proxy; keep secrets on the server only):
 ### Supabase dashboard (existing project — do not recreate)
 
 - Email provider **on**; third-party OAuth **off**; magic-link sign-in **off**.
-- Site URL: `https://api.aurashields.com`
-- Redirect allowlist: `https://api.aurashields.com/auth/callback` (password-reset form; not a custom scheme)
+- Site URL: `https://fitpixel.app`
+- Redirect allowlist: `https://api.fitpixel.app/auth/callback` (password-reset form; not a custom scheme), plus the legacy `https://api.aurashields.com/auth/callback` while older builds are installed
 - Confirm-email: prefer off for password signup this pass, or HTTPS callback only — never scheme-only `fitpixel://`.
 
 SQL lives in [`supabase/migrations`](supabase/migrations). Apply with `npm run db:migrate` (needs `DATABASE_URL`). GitHub Actions does **not** run migrations — apply once on the droplet after deploy if needed.
@@ -261,7 +261,7 @@ Habit log payload shape: [`src/types/habits.ts`](src/types/habits.ts).
 
 ## Production deploy (DigitalOcean + GitHub Actions)
 
-Production host: **`https://api.aurashields.com`** → droplet `68.183.106.85`.
+Production host: **`https://api.fitpixel.app`** → droplet `68.183.106.85`. The legacy `https://api.aurashields.com` points at the same server and stays up for app builds that still call it. Added to an existing droplet with `sudo bash deploy/add-api-fitpixel-domain.sh`.
 
 After the one-time setup below, **merging (or pushing) to `main` deploys** via [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml): SSH in, `git reset --hard origin/main`, `npm ci`, `npm run build`, `pm2 reload`.
 
@@ -269,9 +269,9 @@ After the one-time setup below, **merging (or pushing) to `main` deploys** via [
 
 ### One-time checklist
 
-#### 1. GoDaddy DNS
+#### 1. DNS
 
-For domain `aurashields.com`:
+`fitpixel.app` DNS is on Cloudflare (GoDaddy is only the registrar). Add a **DNS only** (grey cloud) record, so Certbot and real client IPs reach nginx:
 
 | Type | Name | Value           | TTL |
 |------|------|-----------------|-----|
@@ -280,7 +280,7 @@ For domain `aurashields.com`:
 Confirm before Certbot:
 
 ```bash
-dig api.aurashields.com +short
+dig api.fitpixel.app +short
 # expect: 68.183.106.85
 ```
 
@@ -355,8 +355,8 @@ npm run db:migrate
 Issue TLS (after DNS points here), then install the committed HTTP→HTTPS config:
 
 ```bash
-certbot --nginx -d api.aurashields.com --agree-tos --redirect -m YOUR_EMAIL@example.com
-sudo cp /var/www/fit-pixel-server/deploy/nginx-api.aurashields.com.conf /etc/nginx/sites-available/api.aurashields.com
+certbot --nginx -d api.fitpixel.app --agree-tos --redirect -m YOUR_EMAIL@example.com
+sudo cp /var/www/fit-pixel-server/deploy/nginx-api.fitpixel.app.conf /etc/nginx/sites-available/api.fitpixel.app
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
@@ -365,10 +365,10 @@ GitHub Actions reloads Node only; it does **not** copy nginx. After a nginx chan
 Verify:
 
 ```bash
-curl -sI http://api.aurashields.com/health | head -n 1
+curl -sI http://api.fitpixel.app/health | head -n 1
 # HTTP/1.1 301 Moved Permanently
 
-curl -fsS https://api.aurashields.com/health
+curl -fsS https://api.fitpixel.app/health
 # {"ok":true,"status":"up"}
 ```
 
@@ -379,7 +379,7 @@ Push or merge to `main` → Actions runs **Deploy** → PM2 reloads. No manual S
 Local files used in production:
 
 - [`ecosystem.config.cjs`](ecosystem.config.cjs) — PM2 app name `fit-pixel-api`
-- [`deploy/nginx-api.aurashields.com.conf`](deploy/nginx-api.aurashields.com.conf) — HTTP 301 → HTTPS, HSTS, reverse proxy to `:3001`
+- [`deploy/nginx-api.fitpixel.app.conf`](deploy/nginx-api.fitpixel.app.conf) — HTTP 301 → HTTPS, HSTS, reverse proxy to `:3001`
 - [`deploy/bootstrap.sh`](deploy/bootstrap.sh) — one-time server setup
 
 ## Next

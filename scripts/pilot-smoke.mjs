@@ -11,7 +11,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const API_BASE = (
-  process.env.FIT_PIXEL_API_URL ?? "https://api.aurashields.com"
+  process.env.FIT_PIXEL_API_URL ?? "https://api.fitpixel.app"
 ).replace(/\/$/, "");
 
 const supabaseUrl = process.env.SUPABASE_URL?.trim()?.replace(/\/$/, "");

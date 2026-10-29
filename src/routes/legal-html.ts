@@ -2,9 +2,9 @@ import { Router } from "express";
 
 /**
  * Privacy Policy, Terms of Use and Support, served at /privacy, /terms and
- * /support. The app links here (Settings → Legal, sign-up) and App Store
- * Connect uses https://api.aurashields.com/privacy as the Privacy Policy URL
- * and https://api.aurashields.com/support as the Support URL.
+ * /support. The public URLs are https://fitpixel.app/privacy, /terms and
+ * /support: the website proxies these routes (fit-pixel-website functions/),
+ * so the app, App Store Connect and the site all link to fitpixel.app.
  *
  * Static HTML, no scripts. Keep the text in step with what the app and this
  * server actually collect; bump LEGAL_EFFECTIVE_DATE on every change.

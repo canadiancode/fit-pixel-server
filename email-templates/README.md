@@ -7,7 +7,7 @@ Pixel-styled Supabase Auth emails. They're generated from one layout by `node sc
 | Confirm signup | `confirm-signup.html` | Confirm your Fit Pixel account |
 | Reset password | `reset-password.html` | Reset your Fit Pixel password |
 
-Both links land on this server's `/auth/callback` page. Reset links show the "choose a new password" form; confirmation links show "You're all set, open the app". Images and the pixel font load from `https://api.aurashields.com/auth/assets/`.
+Both links land on this server's `/auth/callback` page. Reset links show the "choose a new password" form; confirmation links show "You're all set, open the app". Images and the pixel font load from `https://api.fitpixel.app/auth/assets/`.
 
 ## One-time setup (about 20 minutes)
 
@@ -30,7 +30,7 @@ One Resend account sends three things: sign-up confirmations, password resets (b
 3. **Emails → Templates:**
    - *Confirm signup*: subject `Confirm your Fit Pixel account`, paste all of `confirm-signup.html` into the body.
    - *Reset password*: subject `Reset your Fit Pixel password`, paste all of `reset-password.html`.
-4. **URL Configuration:** Site URL `https://fitpixel.app`. Redirect URLs must include `https://api.aurashields.com/auth/callback`.
+4. **URL Configuration:** Site URL `https://fitpixel.app`. Redirect URLs must include `https://api.fitpixel.app/auth/callback` (keep `https://api.aurashields.com/auth/callback` until no installed build uses it).
 5. **Sign In / Providers → Email:** turn **Confirm email** on. Accounts that already exist were confirmed automatically and aren't affected.
 
 ### 3. Test on your phone
