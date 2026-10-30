@@ -507,6 +507,17 @@ export const trainingPlanPayloadSchema = z.object({
 
 const untrustedPayloadSchema = z.record(z.string(), z.unknown());
 
+/**
+ * xp_award payload for weigh-in / weight-journey XP, the one client award the
+ * server counts (bounded by claim_my_weight_xp). Other xp_award ops are ignored.
+ */
+export const weightXpAwardSchema = z.object({
+  awardKey: z.string().min(1).max(120),
+  reason: z.enum(["weigh_in", "weight_milestone"]),
+  amount: z.number().int().min(1).max(250),
+  dayKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
 const opEnvelope = {
   id: z.string().uuid(),
   clientClockAt: isoDatetime.nullable(),

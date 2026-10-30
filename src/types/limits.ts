@@ -70,6 +70,16 @@ export const XP_WORKOUT_SETS_PER_DAY = 40;
 /** A synced workout with at least one completed set, up to XP_WORKOUT_COMPLETES_PER_DAY a day. */
 export const XP_WORKOUT_COMPLETE = 25;
 export const XP_WORKOUT_COMPLETES_PER_DAY = 2;
+/**
+ * Weight XP the app awards and claim_my_weight_xp() accepts: a weekly weigh-in
+ * (base + streak step per week, up to the cap), each journey milestone, and
+ * reaching the goal weight.
+ */
+export const XP_WEIGH_IN_BASE = 30;
+export const XP_WEIGH_IN_STREAK_STEP = 10;
+export const XP_WEIGH_IN_STREAK_MAX_BONUS = 50;
+export const XP_WEIGHT_MILESTONE = 100;
+export const XP_WEIGHT_GOAL_REACHED = 250;
 
 /** Workout session + training plan bounds (workout_session / training_plan ops). */
 export const TRAINING_LIMITS = {
