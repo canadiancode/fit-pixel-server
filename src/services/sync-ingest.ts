@@ -4,7 +4,7 @@ import type {
   PendingServerOp,
   SyncAck,
 } from "../types/sync";
-import { trustForOpType } from "../types/sync";
+import { trustForOpType, weightXpAwardSchema } from "../types/sync";
 import { isValidTimeZone } from "../utils/day-key";
 import { parseSocialLink } from "../utils/social";
 import { recomputeXpState } from "./xp-recompute";
@@ -348,6 +348,27 @@ async function ingestOne(
   const existing = ctx.acks.get(op.id);
   if (existing) {
     return { ack: existing, recomputeXp: false };
+  }
+
+  // Weight XP can't be derived from server facts (the journey settings live on
+  // the device), so claim_my_weight_xp() bounds and records it instead.
+  const weightAward =
+    op.type === "xp_award" ? weightXpAwardSchema.safeParse(op.payload) : null;
+  if (weightAward?.success) {
+    const { data: status, error } = await supabase.rpc("claim_my_weight_xp", {
+      award_key: weightAward.data.awardKey,
+      reason: weightAward.data.reason,
+      amount: weightAward.data.amount,
+      award_day_key: weightAward.data.dayKey,
+    });
+    throwIfError(error);
+    const claimed = status === "ok";
+    const ack: SyncAck =
+      claimed || status === "duplicate"
+        ? { id: op.id, status: "synced" }
+        : { id: op.id, status: "rejected", reason: String(status) };
+    await recordAck(supabase, userId, op, ack, ctx);
+    return { ack, recomputeXp: claimed };
   }
 
   if (trustForOpType(op.type) === "untrusted_client") {

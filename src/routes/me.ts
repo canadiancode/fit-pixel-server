@@ -4,6 +4,7 @@ import { requireAuth } from "../middleware/require-auth";
 import { listJoinedGymChats } from "../services/chat";
 import { getRestoreSnapshot } from "../services/restore";
 import { deleteOwnAccount } from "../services/safety";
+import { getServerXp } from "../services/xp-recompute";
 import { AppError } from "../types/api";
 
 export const meRouter = Router();
@@ -36,6 +37,23 @@ meRouter.get("/snapshot", requireAuth, async (req, res, next) => {
       auth.userId,
     );
     res.json({ ok: true, ...snapshot });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * The caller's XP, freshly recomputed. The app shows this total so the level
+ * matches the leaderboard and every device.
+ */
+meRouter.get("/xp", requireAuth, async (req, res, next) => {
+  try {
+    const auth = req.auth;
+    if (!auth) {
+      throw new AppError(401, "UNAUTHORIZED", "Missing auth context");
+    }
+    const xp = await getServerXp(createUserSupabaseClient(auth.token));
+    res.json({ ok: true, ...xp });
   } catch (err) {
     next(err);
   }
