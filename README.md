@@ -248,10 +248,11 @@ Response:
 
 ### Trust rules
 
-- **FACTS** (persist after sanitization): `habit_log`, `daily_goals`, `loadout`, `profile`, `prefs`, `saved_meal`, `workout_session`, `training_plan`
+- **FACTS** (persist after sanitization): `habit_log`, `daily_goals`, `loadout`, `profile`, `prefs`, `saved_meal`, `workout_session`, `training_plan`, `weight_journey`
 - **UNTRUSTED** (ack `synced` with `ignored_untrusted`; do not persist as score/ownership): `xp_award`, `inventory_unlock`
 - Recompute XP / level into `xp_state` from `habit_log` + `daily_goals` + `workout_session` (completed sets, capped per day; see `recompute_my_xp()` in the newest migration that defines it)
-- `training_plan` is last-write-wins on its `updatedAt`; it never affects XP
+- `training_plan` and `weight_journey` are last-write-wins on their `updatedAt`; they never affect XP
+- Each op is validated on its own: a bad op gets `rejected` with an `invalid_payload: …` reason and the rest of the batch still applies. An op type this server doesn't know gets `rejected` / `unsupported_type` and is **not** recorded, so the app keeps it and retries after a server update. Only a malformed batch (not an array, over 500 ops, op without `id`/`type`) is a 400.
 - Do not trust client `dayKey` — re-derive from timestamp + stored timezone / day-start
 - Ignore client `source` for scoring; never store raw HealthKit sample blobs
 - `profileVisible` is a server publish gate (default hidden)

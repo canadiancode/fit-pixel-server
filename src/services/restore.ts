@@ -17,6 +17,7 @@ import {
   type RestoreSavedMeal,
   type RestoreSnapshot,
   type RestoreTrainingPlan,
+  type RestoreWeightJourney,
   type RestoreWorkoutSession,
   type RestoreXp,
   type WorkoutsPage,
@@ -166,6 +167,7 @@ export async function getRestoreSnapshot(
     logCount,
     plan,
     workoutCount,
+    journey,
   ] = await Promise.all([
     supabase
       .from("profiles")
@@ -220,6 +222,13 @@ export async function getRestoreSnapshot(
       .from("workout_sessions")
       .select("id", { count: "exact", head: true })
       .eq("user_id", userId),
+    supabase
+      .from("weight_journeys")
+      .select(
+        "start_weight,start_unit,start_day_key,weigh_in_weekday,reminder_enabled,hide_numbers,updated_at",
+      )
+      .eq("user_id", userId)
+      .maybeSingle(),
   ]);
 
   for (const result of [
@@ -232,6 +241,7 @@ export async function getRestoreSnapshot(
     logCount,
     plan,
     workoutCount,
+    journey,
   ]) {
     throwIfError(result.error);
   }
@@ -310,6 +320,21 @@ export async function getRestoreSnapshot(
       ? { plan: tp.plan as Record<string, unknown>, updatedAt: tp.updated_at }
       : null;
 
+  const wj = journey.data;
+  const weightJourney: RestoreWeightJourney | null = wj
+    ? {
+        // numeric comes back as a string from PostgREST.
+        startWeight: wj.start_weight == null ? null : Number(wj.start_weight),
+        startUnit:
+          wj.start_unit === "lb" || wj.start_unit === "kg" ? wj.start_unit : null,
+        startDayKey: wj.start_day_key,
+        weighInWeekday: wj.weigh_in_weekday,
+        reminderEnabled: wj.reminder_enabled,
+        hideNumbers: wj.hide_numbers,
+        updatedAt: wj.updated_at,
+      }
+    : null;
+
   return {
     serverTime: new Date().toISOString(),
     profile: restoreProfile,
@@ -321,5 +346,6 @@ export async function getRestoreSnapshot(
     habitLogCount: logCount.count ?? 0,
     trainingPlan,
     workoutSessionCount: workoutCount.count ?? 0,
+    weightJourney,
   };
 }

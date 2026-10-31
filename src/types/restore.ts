@@ -60,6 +60,16 @@ export type RestoreTrainingPlan = {
   updatedAt: string;
 };
 
+export type RestoreWeightJourney = {
+  startWeight: number | null;
+  startUnit: "lb" | "kg" | null;
+  startDayKey: string | null;
+  weighInWeekday: number;
+  reminderEnabled: boolean;
+  hideNumbers: boolean;
+  updatedAt: string;
+};
+
 export type HabitsPage = {
   logs: HabitLogSyncPayload[];
   /** Pass as `after` for the next page; null when this was the last page. */
@@ -141,4 +151,5 @@ export type RestoreSnapshot = {
   trainingPlan: RestoreTrainingPlan | null;
   /** Total finished workouts; fetch them with GET /v1/workouts. */
   workoutSessionCount: number;
+  weightJourney: RestoreWeightJourney | null;
 };

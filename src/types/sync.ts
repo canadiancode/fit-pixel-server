@@ -39,6 +39,7 @@ export const PENDING_SERVER_OP_TYPES = [
   "saved_meal",
   "workout_session",
   "training_plan",
+  "weight_journey",
 ] as const;
 
 export type PendingServerOpType = (typeof PENDING_SERVER_OP_TYPES)[number];
@@ -55,6 +56,7 @@ export const FACT_PENDING_OP_TYPES = [
   "saved_meal",
   "workout_session",
   "training_plan",
+  "weight_journey",
 ] as const satisfies readonly PendingServerOpType[];
 
 export const UNTRUSTED_PENDING_OP_TYPES = [
@@ -505,6 +507,25 @@ export const trainingPlanPayloadSchema = z.object({
   updatedAt: isoDatetime,
 });
 
+/** Device-only fields (reminder notification id, last Health sync) are not sent. */
+export const weightJourneyPayloadSchema = z
+  .object({
+    startWeight: z.number().finite().positive().max(1_500).nullable(),
+    startUnit: z.enum(["lb", "kg"]).nullable(),
+    startDayKey: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullable(),
+    weighInWeekday: z.number().int().min(0).max(6),
+    reminderEnabled: z.boolean(),
+    hideNumbers: z.boolean(),
+    updatedAt: isoDatetime,
+  })
+  .refine(
+    (data) => (data.startWeight == null) === (data.startUnit == null),
+    "startWeight and startUnit go together",
+  );
+
 const untrustedPayloadSchema = z.record(z.string(), z.unknown());
 
 const opEnvelope = {
@@ -557,6 +578,11 @@ export const pendingServerOpSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     ...opEnvelope,
+    type: z.literal("weight_journey"),
+    payload: weightJourneyPayloadSchema,
+  }),
+  z.object({
+    ...opEnvelope,
     type: z.literal("xp_award"),
     payload: untrustedPayloadSchema,
   }),
@@ -569,10 +595,24 @@ export const pendingServerOpSchema = z.discriminatedUnion("type", [
 
 export type PendingServerOp = z.infer<typeof pendingServerOpSchema>;
 
+/**
+ * Only the batch shape is checked up front. Each op is validated on its own in
+ * ingestSyncOps, so one bad or unknown op is rejected alone instead of failing
+ * the whole batch (which left every later op stuck on the device forever).
+ */
+export const rawSyncOpSchema = z
+  .object({
+    id: z.string().min(1).max(128),
+    type: z.string().min(1).max(64),
+  })
+  .passthrough();
+
+export type RawSyncOp = z.infer<typeof rawSyncOpSchema>;
+
 export type SyncRequestBody = {
-  ops: PendingServerOp[];
+  ops: RawSyncOp[];
 };
 
 export const syncRequestBodySchema = z.object({
-  ops: z.array(pendingServerOpSchema).max(500),
+  ops: z.array(rawSyncOpSchema).max(500),
 });

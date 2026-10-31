@@ -2,9 +2,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { AppError } from "../types/api";
 import type {
   PendingServerOp,
+  RawSyncOp,
   SyncAck,
 } from "../types/sync";
-import { trustForOpType } from "../types/sync";
+import {
+  PENDING_SERVER_OP_TYPES,
+  pendingServerOpSchema,
+  trustForOpType,
+} from "../types/sync";
 import { isValidTimeZone } from "../utils/day-key";
 import { parseSocialLink } from "../utils/social";
 import { recomputeXpState } from "./xp-recompute";
@@ -315,6 +320,27 @@ async function applyTrainingPlan(
   throwIfError(error);
 }
 
+/** Last write wins on updatedAt, so a late older edit is a no-op. */
+async function applyWeightJourney(
+  supabase: SupabaseClient,
+  op: Extract<PendingServerOp, { type: "weight_journey" }>,
+): Promise<void> {
+  const p = op.payload;
+  const { error } = await supabase.rpc("save_my_weight_journey", {
+    journey_start_weight: p.startWeight,
+    journey_start_unit: p.startUnit,
+    journey_start_day_key: p.startDayKey,
+    journey_weigh_in_weekday: p.weighInWeekday,
+    journey_reminder_enabled: p.reminderEnabled,
+    journey_hide_numbers: p.hideNumbers,
+    journey_updated_at: p.updatedAt,
+  });
+  if (error?.code === "22023") {
+    throw new AppError(400, "VALIDATION_ERROR", error.message);
+  }
+  throwIfError(error);
+}
+
 async function recordAck(
   supabase: SupabaseClient,
   userId: string,
@@ -387,6 +413,9 @@ async function ingestOne(
       case "training_plan":
         await applyTrainingPlan(supabase, op);
         break;
+      case "weight_journey":
+        await applyWeightJourney(supabase, op);
+        break;
       default: {
         const ack: SyncAck = {
           id: op.id,
@@ -422,19 +451,60 @@ async function ingestOne(
   };
 }
 
+const KNOWN_OP_TYPES = new Set<string>(PENDING_SERVER_OP_TYPES);
+
+/** Short, log-safe summary of why an op failed schema validation. */
+function invalidPayloadReason(issues: { path: PropertyKey[]; message: string }[]): string {
+  const first = issues[0];
+  if (!first) return "invalid_payload";
+  const path = first.path.map(String).join(".");
+  return `invalid_payload: ${path ? `${path}: ` : ""}${first.message}`.slice(0, 200);
+}
+
+/**
+ * Validate one raw op. Unknown types (an app newer than this server) are
+ * rejected with `unsupported_type` and never recorded, so the app can retry
+ * them after a server update. Ops that fail the schema are rejected alone.
+ */
+function parseOp(
+  raw: RawSyncOp,
+): { op: PendingServerOp } | { ack: SyncAck } {
+  if (!KNOWN_OP_TYPES.has(raw.type)) {
+    return { ack: { id: raw.id, status: "rejected", reason: "unsupported_type" } };
+  }
+  const parsed = pendingServerOpSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      ack: {
+        id: raw.id,
+        status: "rejected",
+        reason: invalidPayloadReason(parsed.error.issues),
+      },
+    };
+  }
+  return { op: parsed.data };
+}
+
 export async function ingestSyncOps(
   supabase: SupabaseClient,
   userId: string,
-  ops: PendingServerOp[],
+  rawOps: RawSyncOp[],
 ): Promise<SyncAck[]> {
   const acks: SyncAck[] = [];
   let recomputeXp = false;
+
+  const parsed = rawOps.map(parseOp);
+  const validOps = parsed.flatMap((item) => ("op" in item ? [item.op] : []));
   const ctx: BatchContext = {
-    acks: await loadStoredAcks(supabase, ops),
+    acks: await loadStoredAcks(supabase, validOps),
   };
 
-  for (const op of ops) {
-    const result = await ingestOne(supabase, userId, op, ctx);
+  for (const item of parsed) {
+    if ("ack" in item) {
+      acks.push(item.ack);
+      continue;
+    }
+    const result = await ingestOne(supabase, userId, item.op, ctx);
     acks.push(result.ack);
     if (result.recomputeXp) {
       recomputeXp = true;
